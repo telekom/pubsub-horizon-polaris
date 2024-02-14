@@ -1,0 +1,115 @@
+plugins {
+    id 'org.springframework.boot' version '3.2.2'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'java'
+    id "jacoco"
+}
+
+def getVersion() {
+    def version = "0.0.0"
+    def gitBranch = "develop"
+    try {
+        def workingDir = new File("${project.projectDir}")
+        def result = 'git rev-parse --abbrev-ref HEAD'.execute(null, workingDir)
+        result.waitFor()
+        if (result.exitValue() == 0) {
+            gitBranch = result.text.trim().replace("/", "-")
+        }
+    } catch (ignored) {
+    }
+
+    if (System.getenv('CI_COMMIT_TAG')) {
+        version = System.getenv('CI_COMMIT_TAG')
+    } else if (System.getenv('CI_COMMIT_REF_SLUG')) {
+        version += ("-" + System.getenv('CI_COMMIT_REF_SLUG'))
+    } else {
+        version += ("-" + gitBranch)
+    }
+
+    return version
+}
+
+group = 'de.telekom.horizon'
+version = getVersion()
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+ext {
+    repoBase = System.getenv("PANDORA_ARTIFACTORY_GRADLE_CONTEXT") ?: "$artifactory_contextUrl"
+}
+
+repositories {
+    maven {
+        credentials {
+            username System.getenv('PANDORA_ARTIFACTORY_GRADLE_USERNAME') ?: "$artifactory_user"
+            password System.getenv('PANDORA_ARTIFACTORY_GRADLE_PASSWORD') ?: "$artifactory_password"
+        }
+        url "$repoBase/maven-central"
+    }
+    maven {
+        credentials {
+            username System.getenv('PANDORA_ARTIFACTORY_GRADLE_USERNAME') ?: "$artifactory_user"
+            password System.getenv('PANDORA_ARTIFACTORY_GRADLE_PASSWORD') ?: "$artifactory_password"
+        }
+        url "$repoBase/dhei-pandora-gradle"
+    }
+    maven { url 'https://repo.spring.io/milestone' }
+    mavenLocal()
+}
+
+def httpClientVersion = '4.5.13'
+// ENI
+def horizonParentVersion = '3.2.2'
+
+dependencies {
+    // Spring
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+    implementation 'org.springframework.kafka:spring-kafka'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+    // 3rd party
+    implementation("org.apache.httpcomponents:httpclient:${httpClientVersion}") { exclude group: 'commons-logging' }
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    compileOnly "org.projectlombok:lombok:"
+    annotationProcessor "org.projectlombok:lombok:"
+    testCompileOnly "org.projectlombok:lombok:"
+    testAnnotationProcessor "org.projectlombok:lombok:"
+
+    testImplementation 'org.awaitility:awaitility:4.2.0'
+    testImplementation "de.bwaldvogel:mongo-java-server:1.44.0"
+    testImplementation "org.wiremock:wiremock-standalone:3.3.1"
+
+    // ENI
+    implementation "de.telekom.eni:horizon-spring-boot-starter:${horizonParentVersion}"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+test {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        csv.required = true
+        html.required = true
+    }
+}
+
+bootJar {
+    archiveFileName.set("${project.name}.jar")
+}
