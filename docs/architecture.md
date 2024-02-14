@@ -1,3 +1,9 @@
+<!--
+Copyright 2024 Deutsche Telekom IT GmbH
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Architecture
 Polaris serves as Horizon's circuit breaker microservice, integral to the reliable delivery of events. 
 Its primary function involves periodic checks of a customer's endpoint, employing HEAD or GET requests to determine availability. 
