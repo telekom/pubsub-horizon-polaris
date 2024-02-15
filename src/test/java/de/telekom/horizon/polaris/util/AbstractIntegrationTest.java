@@ -43,7 +43,6 @@ import org.springframework.kafka.listener.MessageListener;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.utils.ContainerTestUtils;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -54,10 +53,10 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static de.telekom.horizon.polaris.util.WiremockStubs.stubOidc;
 
 @SpringBootTest()
 @Import(MongoTestServerConfiguration.class)
-@ActiveProfiles("dev")
 @Slf4j
 public abstract class AbstractIntegrationTest {
 
@@ -194,13 +193,14 @@ public abstract class AbstractIntegrationTest {
         registry.add("polaris.polling.interval-ms", () -> 1000000000); // so big it does not get called
         registry.add("polaris.deliveringStates-offset-mins", () -> 0); // timestamp should be > 0 - now
         registry.add("logging.level.root", () -> "INFO");
+        registry.add("polaris.oidc.token-uri", () -> wireMockServer.baseUrl() + "/oidc");
         registry.add("polaris.oidc.cronTokenFetch", () -> "-");
         registry.add("logging.level.de.telekom.horizon.polaris", () -> "DEBUG");
     }
 
     @BeforeAll
     static void beforeAll() {
-
+        stubOidc(wireMockServer);
     }
 
     public String getEventType() {
