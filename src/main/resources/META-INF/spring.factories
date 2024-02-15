@@ -1,0 +1,6 @@
+org.springframework.aot.context.bootstrap.generator.infrastructure.nativex.BeanFactoryNativeConfigurationProcessor=\
+  de.telekom.eni.pandora.horizon.nativex.Fabric8BeanFactoryNativeConfigurationProcessor
+
+org.springframework.nativex.type.NativeConfiguration=\
+  de.telekom.eni.pandora.horizon.nativex.Fabric8NativeConfiguration,\
+  de.telekom.eni.pandora.horizon.nativex.HorizonNativeConfiguration

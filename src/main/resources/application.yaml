@@ -1,0 +1,96 @@
+# Copyright 2024 Deutsche Telekom IT GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
+spring:
+  application:
+    name: Horizon Polaris
+
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}
+
+polaris:
+  pod-name: ${POD_NAME:polaris-default}
+  oidc:
+    token-uri: ${IRIS_TOKEN_ENDPOINT:https://iris.example.com/auth/realms/<realm>/protocol/openid-connect/token}
+    client-id: ${IRIS_CLIENT_ID:gateway}
+    client-secret: ${IRIS_CLIENT_SECRET:default=supersecret}
+    # hard code cron statement here to enable configuration (and disablement in integration tests)
+    cronTokenFetch: "0 */4 * * * *"
+  max-timeout: ${POLARIS_MAX_TIMEOUT:30000}
+  max-connections: ${POLARIS_MAX_CONNECTIONS:100}
+  deliveringStates-offset-mins: ${POLARIS_DELIVERING_STATES_OFFSET_MINS:15} #Only load MessageStates with a time < (now - deliveringStates-offset-mins)
+  polling:
+    interval-ms: ${POLARIS_POLLING_INTERVAL_MS:30000}
+    batch-size: ${POLARIS_POLLING_BATCH_SIZE:10}
+  picking:
+    timeout-ms: ${POLARIS_PICKING_TIMEOUT_MS:5000}
+  request:
+    cooldown-reset-mins: ${POLARIS_REQUEST_COOLDOWN_RESET_MINS:90} # Needs to be more than 60, because 60 mins can be the maximum cooldown on loop
+    threadpool:
+      pool-size: ${POLARIS_REQUEST_THREADPOOL_SIZE:50}
+    delay-mins: ${POLARIS_REQUEST_DELAY_MINS:5}
+    successful-status-codes: ${POLARIS_SUCCESSFUL_STATUS_CODES:200,201,202,204}
+  subscription-check:
+    threadpool:
+      max-size: ${POLARIS_SUBCHECK_THREADPOOL_MAX_SIZE:50}
+      core-size: ${POLARIS_SUBCHECK_THREADPOOL_CORE_SIZE:50}
+      queue-capacity: ${POLARIS_SUBCHECK_THREADPOOL_QUEUE_CAPACITY:50}
+  republish:
+    threadpool:
+      max-size: ${POLARIS_REPUBLISH_THREADPOOL_MAX_SIZE:50}
+      core-size: ${POLARIS_REPUBLISH_THREADPOOL_CORE_SIZE:50}
+      queue-capacity: ${POLARIS_REPUBLISH_THREADPOOL_QUEUE_CAPACITY:50}
+    batch-size: ${POLARIS_REPUBLISH_BATCH_SIZE:20}
+    timeout-ms: ${POLARIS_REPUBLISHING_TIMEOUT_MS:5000}
+
+horizon:
+  cache:
+    enabled: true
+  mongo:
+    enabled: true
+  kafka:
+    bootstrapServers: ${POLARIS_KAFKA_BROKERS:kafka:9092,localhost:9092}
+    lingerMs: ${POLARIS_KAFKA_LINGER_MS:5}
+    disableGroupId: true
+    acks: ${POLARIS_KAFKA_ACKS:1}
+    # only for unique kafka header when producing messages
+    groupId: ${POLARIS_KAFKA_GROUPID:polaris}
+    compression:
+      enabled: ${POLARIS_KAFKA_COMPRESSION_ENABLED:false}
+      type: ${POLARIS_KAFKA_COMPRESSION_TYPE:none}
+
+kubernetes:
+  enabled: true
+  #roverToken:
+  #kubeConfigPath:
+  informer:
+    pods:
+      namespace: ${POLARIS_PODS_INFORMER_NAMESPACE:integration}
+      appname: ${POLARIS_APP_NAME:horizon-polaris}
+    resyncperiod:
+      # 10 minutes
+      ms: 600000
+    namespace: ${POLARIS_INFORMER_NAMESPACE:integration}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,heapdump,shutdown
+  endpoint:
+    health:
+      show-details: always
+    shutdown:
+      enabled: true
+  zipkin:
+    tracing:
+      endpoint: ${JAEGER_COLLECTOR_URL:http://jaeger-collector.example.com:9411}
+  tracing:
+    sampling:
+      probability: ${ZIPKIN_SAMPLER_PROBABILITY:1.0}
+
+pandora:
+  tracing:
+    name: horizon
