@@ -42,32 +42,13 @@ configurations {
     }
 }
 
-ext {
-    repoBase = System.getenv("PANDORA_ARTIFACTORY_GRADLE_CONTEXT") ?: "$artifactory_contextUrl"
-}
-
 repositories {
-    maven {
-        credentials {
-            username System.getenv('PANDORA_ARTIFACTORY_GRADLE_USERNAME') ?: "$artifactory_user"
-            password System.getenv('PANDORA_ARTIFACTORY_GRADLE_PASSWORD') ?: "$artifactory_password"
-        }
-        url "$repoBase/maven-central"
-    }
-    maven {
-        credentials {
-            username System.getenv('PANDORA_ARTIFACTORY_GRADLE_USERNAME') ?: "$artifactory_user"
-            password System.getenv('PANDORA_ARTIFACTORY_GRADLE_PASSWORD') ?: "$artifactory_password"
-        }
-        url "$repoBase/dhei-pandora-gradle"
-    }
-    maven { url 'https://repo.spring.io/milestone' }
-    mavenLocal()
+    mavenCentral()
 }
 
 def httpClientVersion = '4.5.13'
 // ENI
-def horizonParentVersion = '3.2.2'
+def horizonParentVersion = '4.0.0'
 
 dependencies {
     // Spring
