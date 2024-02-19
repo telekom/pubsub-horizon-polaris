@@ -45,6 +45,8 @@ import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.utils.ContainerTestUtils;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.MongoDBContainer;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
@@ -55,13 +57,17 @@ import java.util.concurrent.TimeUnit;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static de.telekom.horizon.polaris.util.WiremockStubs.stubOidc;
 
-@SpringBootTest()
-@Import(MongoTestServerConfiguration.class)
+@SpringBootTest
+@Testcontainers
 @Slf4j
 public abstract class AbstractIntegrationTest {
 
+    public static final MongoDBContainer mongodb;
+
     static {
         EmbeddedKafkaHolder.getEmbeddedKafka();
+        mongodb = new MongoDBContainer("mongo:7");
+        mongodb.start();
     }
 
     public static final EmbeddedKafkaBroker broker = EmbeddedKafkaHolder.getEmbeddedKafka();
@@ -189,7 +195,8 @@ public abstract class AbstractIntegrationTest {
         registry.add("horizon.cache.kubernetesServiceDns", () -> "");
         registry.add("horizon.cache.deDuplication.enabled", () -> true);
         registry.add("kubernetes.enabled", () -> false);
-        registry.add("horizon.victorialog.enabled", () -> false);
+        registry.add("horizon.mongo.url", mongodb::getConnectionString);
+        registry.add("horizon.mongo.database", () -> "test");
         registry.add("polaris.polling.interval-ms", () -> 1000000000); // so big it does not get called
         registry.add("polaris.deliveringStates-offset-mins", () -> 0); // timestamp should be > 0 - now
         registry.add("logging.level.root", () -> "INFO");
