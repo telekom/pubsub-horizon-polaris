@@ -4,7 +4,7 @@
 
 package de.telekom.horizon.polaris.service;
 
-import com.hazelcast.com.google.common.util.concurrent.*;
+import com.google.common.util.concurrent.*;
 import de.telekom.eni.pandora.horizon.kafka.event.EventWriter;
 import de.telekom.eni.pandora.horizon.mongo.model.MessageStateMongoDocument;
 import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
@@ -30,7 +30,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 /**
