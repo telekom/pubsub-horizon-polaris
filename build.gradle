@@ -67,7 +67,7 @@ repositories {
 
 def httpClientVersion = '4.5.13'
 // ENI
-def horizonParentVersion = '3.2.2'
+def horizonParentVersion='4.0.3'
 
 dependencies {
     // Spring
@@ -81,6 +81,8 @@ dependencies {
     // 3rd party
     implementation("org.apache.httpcomponents:httpclient:${httpClientVersion}") { exclude group: 'commons-logging' }
     implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    implementation('com.google.guava:guava:33.0.0-jre')
 
     compileOnly "org.projectlombok:lombok:"
     annotationProcessor "org.projectlombok:lombok:"

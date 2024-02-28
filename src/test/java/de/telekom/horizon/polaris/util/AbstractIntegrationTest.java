@@ -6,7 +6,6 @@ package de.telekom.horizon.polaris.util;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
-import com.hazelcast.org.apache.commons.codec.digest.DigestUtils;
 import de.telekom.eni.pandora.horizon.kafka.event.EventWriter;
 import de.telekom.eni.pandora.horizon.kubernetes.InformerStoreInitHandler;
 import de.telekom.eni.pandora.horizon.kubernetes.PodResourceListener;
@@ -26,6 +25,7 @@ import de.telekom.horizon.polaris.config.PolarisConfig;
 import de.telekom.horizon.polaris.model.PartialSubscription;
 import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
