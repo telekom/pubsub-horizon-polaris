@@ -189,7 +189,6 @@ public abstract class AbstractIntegrationTest {
         registry.add("horizon.cache.kubernetesServiceDns", () -> "");
         registry.add("horizon.cache.deDuplication.enabled", () -> true);
         registry.add("kubernetes.enabled", () -> false);
-        registry.add("horizon.victorialog.enabled", () -> false);
         registry.add("polaris.polling.interval-ms", () -> 1000000000); // so big it does not get called
         registry.add("polaris.deliveringStates-offset-mins", () -> 0); // timestamp should be > 0 - now
         registry.add("logging.level.root", () -> "INFO");

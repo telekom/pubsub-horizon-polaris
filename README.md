@@ -75,9 +75,18 @@ docker-compuse up -d
 
 4. Run Locally
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=dev'
+./gradlew bootRun
 ```
-This command will start Horizon Polaris in development mode.
+
+5. Docker build
+
+The default docker base image is `azul/zulu-openjdk-alpine:21-jre`. This is customizable via the docker build arg `DOCKER_BASE_IMAGE`.
+Please note that the default helm values configure the kafka compression type `snappy` whose dependencies have to be available in the result image.
+So either provide a base image with snappy installed or change/disable the compression type in the helm values.
+
+```bash
+docker build -t horizon-polaris:latest --build-arg="DOCKER_BASE_IMAGE=<myjvmbaseimage:1.0.0>" . 
+```
 
 ## Operational Information
 Polaris shares a Hazelcast cache with Comet, named the circuit breaker cache. When Comet is unable to deliver an event, Polaris adds an entry to this cache. Polaris periodically polls this cache, picking up entries with the circuit breaker status OPEN. It then hashes the callback URL, calculates its pod index, and handles the circuit breaker message. If a circuit breaker message is already assigned to another pod, Polaris checks if the pod is still alive. If it is, Polaris skips handling the message.
