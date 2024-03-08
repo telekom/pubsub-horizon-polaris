@@ -53,6 +53,16 @@ class PolarisConfigTest {
         assertEquals(Integer.MAX_VALUE, polarisConfig.getRepublishingThreadpoolQueueCapacity());
     }
 
+    @Test
+    void getSubscriptionCheckThreadpoolMaxPoolSize() {
+        assertEquals(Integer.MAX_VALUE, polarisConfig.getSubscriptionCheckThreadpoolMaxPoolSize());
+    }
+
+    @Test
+    void getRepublishingThreadpoolMaxPoolSize() {
+        assertEquals(Integer.MAX_VALUE, polarisConfig.getRepublishingThreadpoolMaxPoolSize());
+    }
+
     @BeforeAll
     static void beforeAll() {
         stubOidc(wireMockServer);
@@ -63,6 +73,8 @@ class PolarisConfigTest {
 
         registry.add("polaris.subscription-check.threadpool.queue-capacity", () -> "");
         registry.add("polaris.republish.threadpool.queue-capacity", () -> "");
+        registry.add("polaris.subscription-check.threadpool.max-size", () -> "");
+        registry.add("polaris.republish.threadpool.max-size", () -> "");
 
         registry.add("spring.zipkin.enabled", () -> false);
         registry.add("spring.zipkin.baseUrl", () -> "http://localhost:9411");
@@ -80,5 +92,6 @@ class PolarisConfigTest {
         registry.add("polaris.oidc.cronTokenFetch", () -> "-");
         registry.add("logging.level.de.telekom.horizon.polaris", () -> "DEBUG");
     }
+
 
 }
