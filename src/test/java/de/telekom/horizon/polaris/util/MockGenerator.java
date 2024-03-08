@@ -44,6 +44,7 @@ import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodStatus;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
@@ -101,7 +102,7 @@ public class MockGenerator {
         podService = mock(PodService.class);
         environment = mock(Environment.class);
         eventWriter = mock(EventWriter.class);
-        meterRegistry = mock(MeterRegistry.class);
+        meterRegistry = new SimpleMeterRegistry();
 
         healthCheckRestClient = mock(HealthCheckRestClient.class);
         when(environment.getActiveProfiles()).thenReturn(new String[]{"test"});

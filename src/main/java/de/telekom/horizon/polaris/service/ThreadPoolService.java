@@ -29,6 +29,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -101,7 +102,7 @@ public class ThreadPoolService {
         var scheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(polarisConfig.getRequestThreadpoolPoolSize());
         scheduledThreadPoolExecutor.setRemoveOnCancelPolicy(true); // Set to true, else OutOfMemory can occur, when Task do not get removed
         this.requestTaskScheduler = MoreExecutors.listeningDecorator(scheduledThreadPoolExecutor);
-        ExecutorServiceMetrics.monitor(meterRegistry, requestTaskScheduler, "requestTaskScheduler");
+        ExecutorServiceMetrics.monitor(meterRegistry, scheduledThreadPoolExecutor, "requestTaskScheduler", Collections.emptyList());
 
         initializeTaskExecutor();
     }
@@ -112,14 +113,14 @@ public class ThreadPoolService {
         republishingTaskExecutor.setQueueCapacity(polarisConfig.getRepublishingThreadpoolQueueCapacity());
         republishingTaskExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         republishingTaskExecutor.afterPropertiesSet();
-        ExecutorServiceMetrics.monitor(meterRegistry, republishingTaskExecutor, "republishingTaskExecutor");
+        ExecutorServiceMetrics.monitor(meterRegistry, republishingTaskExecutor.getThreadPoolExecutor(), "republishingTaskExecutor", Collections.emptyList());
 
         subscriptionCheckTaskExecutor.setMaxPoolSize(polarisConfig.getSubscriptionCheckThreadpoolMaxPoolSize());
         subscriptionCheckTaskExecutor.setCorePoolSize(polarisConfig.getSubscriptionCheckThreadpoolCorePoolSize());
         subscriptionCheckTaskExecutor.setQueueCapacity(polarisConfig.getSubscriptionCheckThreadpoolQueueCapacity());
         subscriptionCheckTaskExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         subscriptionCheckTaskExecutor.afterPropertiesSet();
-        ExecutorServiceMetrics.monitor(meterRegistry, subscriptionCheckTaskExecutor, "subscriptionCheckTaskExecutor");
+        ExecutorServiceMetrics.monitor(meterRegistry, subscriptionCheckTaskExecutor.getThreadPoolExecutor(), "subscriptionCheckTaskExecutor", Collections.emptyList());
     }
 
     private void handleRepublishingCallbackFinished(List<PartialSubscription> partialSubscriptions) {
