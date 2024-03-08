@@ -43,6 +43,7 @@ import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodStatus;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
@@ -81,6 +82,8 @@ public class MockGenerator {
     public static HealthCheckRestClient healthCheckRestClient;
     public static EventWriter eventWriter;
 
+    public static MeterRegistry meterRegistry;
+
     @SneakyThrows
     public static ThreadPoolService mockThreadPoolService() {
         kafkaTemplate = mock(KafkaTemplate.class);
@@ -98,6 +101,7 @@ public class MockGenerator {
         podService = mock(PodService.class);
         environment = mock(Environment.class);
         eventWriter = mock(EventWriter.class);
+        meterRegistry = mock(MeterRegistry.class);
 
         healthCheckRestClient = mock(HealthCheckRestClient.class);
         when(environment.getActiveProfiles()).thenReturn(new String[]{"test"});
@@ -147,7 +151,7 @@ public class MockGenerator {
 
         when(kafkaTemplate.send((ProducerRecord) any())).thenReturn(mock(CompletableFuture.class));
 
-        threadPoolService = spy(new ThreadPoolService(circuitBreakerCache, healthCheckCache, partialSubscriptionCache, kafkaTemplate, polarisConfig, podService, healthCheckRestClient, tracer, messageStateMongoRepo, eventWriter));
+        threadPoolService = spy(new ThreadPoolService(circuitBreakerCache, healthCheckCache, partialSubscriptionCache, kafkaTemplate, polarisConfig, podService, healthCheckRestClient, tracer, messageStateMongoRepo, eventWriter, meterRegistry));
 
         return threadPoolService;
     }

@@ -16,6 +16,8 @@ import de.telekom.horizon.polaris.config.PolarisConfig;
 import de.telekom.horizon.polaris.model.CallbackKey;
 import de.telekom.horizon.polaris.model.PartialSubscription;
 import de.telekom.horizon.polaris.task.*;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * This class has maintains 3 pools (2 x normal, 1 x scheduled). The pools are for
@@ -65,6 +68,7 @@ public class ThreadPoolService {
     private final MessageStateMongoRepo messageStateMongoRepo;
     private final ConcurrentHashMap<CallbackKey, ListenableScheduledFuture<?>> requestingTasks;
     private final EventWriter eventWriter;
+    private final MeterRegistry meterRegistry;
 
     public ThreadPoolService(CircuitBreakerCacheService circuitBreakerCacheService,
                              HealthCheckCache healthCheckCache,
@@ -75,7 +79,8 @@ public class ThreadPoolService {
                              HealthCheckRestClient restClient,
                              HorizonTracer tracer,
                              MessageStateMongoRepo messageStateMongoRepo,
-                             EventWriter eventWriter) {
+                             EventWriter eventWriter,
+                             MeterRegistry meterRegistry) {
         this.circuitBreakerCacheService = circuitBreakerCacheService;
         this.restClient = restClient;
         this.healthCheckCache = healthCheckCache;
@@ -86,6 +91,7 @@ public class ThreadPoolService {
         this.tracer = tracer;
         this.messageStateMongoRepo = messageStateMongoRepo;
         this.eventWriter = eventWriter;
+        this.meterRegistry = meterRegistry;
 
         this.republishingTaskExecutor = new ThreadPoolTaskExecutor();
         this.subscriptionCheckTaskExecutor = new ThreadPoolTaskExecutor();
@@ -95,6 +101,7 @@ public class ThreadPoolService {
         var scheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(polarisConfig.getRequestThreadpoolPoolSize());
         scheduledThreadPoolExecutor.setRemoveOnCancelPolicy(true); // Set to true, else OutOfMemory can occur, when Task do not get removed
         this.requestTaskScheduler = MoreExecutors.listeningDecorator(scheduledThreadPoolExecutor);
+        ExecutorServiceMetrics.monitor(meterRegistry, requestTaskScheduler, "requestTaskScheduler");
 
         initializeTaskExecutor();
     }
@@ -103,56 +110,19 @@ public class ThreadPoolService {
         republishingTaskExecutor.setMaxPoolSize(polarisConfig.getRepublishingThreadpoolMaxPoolSize());
         republishingTaskExecutor.setCorePoolSize(polarisConfig.getRepublishingThreadpoolCorePoolSize());
         republishingTaskExecutor.setQueueCapacity(polarisConfig.getRepublishingThreadpoolQueueCapacity());
+        republishingTaskExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         republishingTaskExecutor.afterPropertiesSet();
+        ExecutorServiceMetrics.monitor(meterRegistry, republishingTaskExecutor, "republishingTaskExecutor");
 
         subscriptionCheckTaskExecutor.setMaxPoolSize(polarisConfig.getSubscriptionCheckThreadpoolMaxPoolSize());
         subscriptionCheckTaskExecutor.setCorePoolSize(polarisConfig.getSubscriptionCheckThreadpoolCorePoolSize());
         subscriptionCheckTaskExecutor.setQueueCapacity(polarisConfig.getSubscriptionCheckThreadpoolQueueCapacity());
+        subscriptionCheckTaskExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         subscriptionCheckTaskExecutor.afterPropertiesSet();
+        ExecutorServiceMetrics.monitor(meterRegistry, subscriptionCheckTaskExecutor, "subscriptionCheckTaskExecutor");
     }
 
-    private void handleSubscriptionComparisonFinished(PartialSubscription oldSubscription, PartialSubscription currentSubscription, @Nullable Throwable throwable) {
-        if (throwable != null) {
-            log.error("Could not finish subscription comparison task for subscriptions (old -> current) {} -> {} with the following error", oldSubscription, currentSubscription, throwable);
-            return;
-        }
-
-        log.info("Successfully finished subscription comparison task for subscriptions (old -> current) {} -> {}", oldSubscription, currentSubscription);
-    }
-
-    private void handleRepublishingSubscriptionIdFinished(Slice<MessageStateMongoDocument> messageStateMongoDocuments, @Nullable Throwable throwable) {
-        if (throwable != null) {
-            log.error("Could not finish republish task for {} messageStateMongoDocuments with the following error", messageStateMongoDocuments.getNumberOfElements(), throwable);
-            return;
-        }
-
-        log.info("Successfully finished republishing task for {} messageStateMongoDocuments", messageStateMongoDocuments.getNumberOfElements());
-    }
-    private void handleRepublishingSubscriptionIdFinished(String subscriptionId, @Nullable Throwable throwable) {
-        if (throwable != null) {
-            log.error("Could not finish republish task (HandleDeliveryTypeChangeTask) for subscriptionId {} with the following error", subscriptionId, throwable);
-            return;
-        }
-
-        log.info("Successfully finished republishing task (HandleDeliveryTypeChangeTask) for subscriptionId {}", subscriptionId);
-    }
-
-
-    private void handleRepublishingCallbackFinished(String callbackUrl, HttpMethod httpMethod, @Nullable Throwable throwable) {
-        if (throwable != null) {
-            log.error("Could not finish republish task (HandleSuccessfulHealthRequestTask) for callbackUrl {}  and httpMethod {}, with the following error", callbackUrl, httpMethod, throwable);
-            return;
-        }
-
-        log.info("Successfully finished republishing task (HandleSuccessfulHealthRequestTask) for callbackUrl {} and httpMethod {}", callbackUrl, httpMethod);
-    }
-
-    private void handleRepublishingCallbackFinished(List<PartialSubscription> partialSubscriptions, @Nullable Throwable throwable) {
-        if (throwable != null) {
-            log.error("Could not finish republish task (RepublishPartialSubscriptions) for partialSubscriptions {} , with the following error", partialSubscriptions, throwable);
-            return;
-        }
-
+    private void handleRepublishingCallbackFinished(List<PartialSubscription> partialSubscriptions) {
         log.info("Successfully finished republishing task (RepublishPartialSubscriptions) for partialSubscriptions {}", partialSubscriptions);
         for (var partialSubscription: partialSubscriptions) {
             String callbackUrl = partialSubscription.callbackUrl();
@@ -198,10 +168,12 @@ public class ThreadPoolService {
         var subscriptionCheckTask = new SubscriptionComparisonTask(oldSubscription, currentSubscriptionOrNull, this);
         var future = subscriptionCheckTaskExecutor.submitCompletable(subscriptionCheckTask);
         future.exceptionally(throwable -> {
-            this.handleSubscriptionComparisonFinished(oldSubscription, currentSubscriptionOrNull, throwable);
+            log.error("Could not finish subscription comparison task for subscriptions (old -> current) {} -> {} with the following error", oldSubscription, currentSubscriptionOrNull, throwable);
             return null;
         });
-        future.thenAccept(result -> this.handleSubscriptionComparisonFinished(oldSubscription, currentSubscriptionOrNull, null));
+        future.thenAccept(result -> {
+            log.info("Successfully finished subscription comparison task for subscriptions (old -> current) {} -> {}", oldSubscription, currentSubscriptionOrNull);
+        });
     }
 
     public void startRepublishTask(Slice<MessageStateMongoDocument> messageStateMongoDocuments) {
@@ -209,10 +181,12 @@ public class ThreadPoolService {
         var republishingTask = new RepublishingTask(messageStateMongoDocuments, this);
         var future = republishingTaskExecutor.submitCompletable(republishingTask);
         future.exceptionally(throwable -> {
-            this.handleRepublishingSubscriptionIdFinished(messageStateMongoDocuments, throwable);
+            log.error("Could not finish republish task for {} messageStateMongoDocuments with the following error", messageStateMongoDocuments.getNumberOfElements(), throwable);
             return null;
         });
-        future.thenAccept(result -> this.handleRepublishingSubscriptionIdFinished(messageStateMongoDocuments, null));
+        future.thenAccept(result -> {
+            log.info("Successfully finished republishing task for {} messageStateMongoDocuments", messageStateMongoDocuments.getNumberOfElements());
+        });
     }
 
     public void startHandleDeliveryTypeChangeTask(PartialSubscription newPartialSubscription) {
@@ -220,21 +194,26 @@ public class ThreadPoolService {
         var republishingTask = new HandleDeliveryTypeChangeTask(newPartialSubscription, this);
         var future = republishingTaskExecutor.submitCompletable(republishingTask);
         future.exceptionally(throwable -> {
-            this.handleRepublishingSubscriptionIdFinished(newPartialSubscription.subscriptionId(), throwable);
+            log.error("Could not finish republish task (HandleDeliveryTypeChangeTask) for subscriptionId {} with the following error", newPartialSubscription.subscriptionId(), throwable);
             return null;
         });
-        future.thenAccept(result -> this.handleRepublishingSubscriptionIdFinished(newPartialSubscription.subscriptionId(), null));
+        future.thenAccept(result -> {
+            log.info("Successfully finished republishing task (HandleDeliveryTypeChangeTask) for subscriptionId {}", newPartialSubscription.subscriptionId());
+        });
     }
 
     public void startHandleSuccessfulHealthRequestTask(String callbackUrl, HttpMethod httpMethod) {
         log.info("Successful HealthRequest! Starting republishing task for callbackUrl {} and httpMethod {}", callbackUrl, httpMethod);
         var republishingTask = new HandleSuccessfulHealthRequestTask(callbackUrl, httpMethod, this);
         var future = republishingTaskExecutor.submitCompletable(republishingTask);
+        // TODO error got submitted, but will not be executed
         future.exceptionally(throwable -> {
-            this.handleRepublishingCallbackFinished(callbackUrl, httpMethod, throwable);
+            log.error("Could not finish republish task (HandleSuccessfulHealthRequestTask) for callbackUrl {}  and httpMethod {}, with the following error", callbackUrl, httpMethod, throwable);
             return null;
         });
-        future.thenAccept(result -> this.handleRepublishingCallbackFinished(callbackUrl, httpMethod, null));
+        future.thenAccept(result -> {
+            log.info("Successfully finished republishing task (HandleSuccessfulHealthRequestTask) for callbackUrl {} and httpMethod {}", callbackUrl, httpMethod);
+        });
     }
 
     public void startRepublishSubscriptionIdsTask(List<PartialSubscription> partialSubscriptions) {
@@ -242,10 +221,10 @@ public class ThreadPoolService {
         var republishingTask = new RepublishPartialSubscriptionsTask(partialSubscriptions, this);
         var future = republishingTaskExecutor.submitCompletable(republishingTask);
         future.exceptionally(throwable -> {
-            this.handleRepublishingCallbackFinished(partialSubscriptions, throwable);
+            log.error("Could not finish republish task (RepublishPartialSubscriptions) for partialSubscriptions {} , with the following error", partialSubscriptions, throwable);
             return null;
         });
-        future.thenAccept(result -> this.handleRepublishingCallbackFinished(partialSubscriptions, null));
+        future.thenAccept(result -> this.handleRepublishingCallbackFinished(partialSubscriptions));
     }
 
     public void startHealthRequestTask(String callbackUrl, String publisherId, String subscriberId, String environment, HttpMethod httpMethod) {
@@ -265,7 +244,7 @@ public class ThreadPoolService {
 
         var republishingTask = new HealthRequestTask(callbackUrl, publisherId, subscriberId, environment, httpMethod, this);
         var future = requestTaskScheduler.schedule(republishingTask, initialDelay);
-        
+
         requestingTasks.put(key, future);
 
         // Need to do this, bc there is no addCallback with success and failure Callbacks :)))))))
