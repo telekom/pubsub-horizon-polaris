@@ -43,14 +43,14 @@ public class PolarisConfig {
     private int subscriptionCheckThreadpoolMaxPoolSize;
     @Value("${polaris.subscription-check.threadpool.core-size}")
     private int subscriptionCheckThreadpoolCorePoolSize;
-    @Value("${polaris.subscription-check.threadpool.queue-capacity}")
+    @Value("#{${polaris.subscription-check.threadpool.queue-capacity}?: T(java.lang.Integer).MAX_VALUE }")
     private int subscriptionCheckThreadpoolQueueCapacity;
 
     @Value("${polaris.republish.threadpool.max-size}")
     private int republishingThreadpoolMaxPoolSize;
     @Value("${polaris.republish.threadpool.core-size}")
     private int republishingThreadpoolCorePoolSize;
-    @Value("${polaris.republish.threadpool.queue-capacity}")
+    @Value("#{${polaris.republish.threadpool.queue-capacity}?: T(java.lang.Integer).MAX_VALUE }")
     private int republishingThreadpoolQueueCapacity;
 
     @Value("${polaris.republish.batch-size}")
