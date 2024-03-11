@@ -190,6 +190,8 @@ public abstract class AbstractIntegrationTest {
         registry.add("horizon.cache.deDuplication.enabled", () -> true);
         registry.add("kubernetes.enabled", () -> false);
         registry.add("polaris.polling.interval-ms", () -> 1000000000); // so big it does not get called
+        registry.add("polaris.max-timeout", () -> 2000);
+        registry.add("polaris.republish.timeout-ms", () -> 1000);
         registry.add("polaris.deliveringStates-offset-mins", () -> 0); // timestamp should be > 0 - now
         registry.add("logging.level.root", () -> "INFO");
         registry.add("polaris.oidc.token-uri", () -> wireMockServer.baseUrl() + "/oidc");
