@@ -18,12 +18,12 @@ SPDX-License-Identifier: Apache-2.0
 | POLARIS_REQUEST_THREADPOOL_SIZE             | 50                        | Maximum number of threads in the thread pool for health check requests.                                                    |
 | POLARIS_REQUEST_DELAY_MINS                  | 5                         | Delay in minutes before starting the health check request after a failed attempt.                                          |
 | POLARIS_SUCCESSFUL_STATUS_CODES             | 200,201,202,204           | Comma-separated list of HTTP status codes considered as successful for health checks.                                      |
-| POLARIS_SUBCHECK_THREADPOOL_MAX_SIZE        | 50                        | Maximum number of threads in the thread pool for subscription checks.                                                      |
+| POLARIS_SUBCHECK_THREADPOOL_MAX_SIZE        | 50                        | Maximum number of threads in the thread pool for subscription checks. (will be set to Integer.Max if set to "")                                                     |
 | POLARIS_SUBCHECK_THREADPOOL_CORE_SIZE       | 50                        | Core number of threads in the thread pool for subscription checks.                                                         |
-| POLARIS_SUBCHECK_THREADPOOL_QUEUE_CAPACITY  | 50                        | Capacity of the queue used by the thread pool for subscription checks.                                                     |
-| POLARIS_REPUBLISH_THREADPOOL_MAX_SIZE       | 50                        | Maximum number of threads in the thread pool for republishing events.                                                      |
+| POLARIS_SUBCHECK_THREADPOOL_QUEUE_CAPACITY  | 50                        | Capacity of the queue used by the thread pool for subscription checks. (will be set to Integer.Max if set to "")           |
+| POLARIS_REPUBLISH_THREADPOOL_MAX_SIZE       | 50                        | Maximum number of threads in the thread pool for republishing events. (will be set to Integer.Max if set to "")                                                     |
 | POLARIS_REPUBLISH_THREADPOOL_CORE_SIZE      | 50                        | Core number of threads in the thread pool for republishing events.                                                         |
-| POLARIS_REPUBLISH_THREADPOOL_QUEUE_CAPACITY | 50                        | Capacity of the queue used by the thread pool for republishing events.                                                     |
+| POLARIS_REPUBLISH_THREADPOOL_QUEUE_CAPACITY | 50                        | Capacity of the queue used by the thread pool for republishing events. (will be set to Integer.Max if set to "")           |
 | POLARIS_REPUBLISH_BATCH_SIZE                | 20                        | Number of events to be republished in each batch during the republishing process.                                          |
 | POLARIS_REPUBLISHING_TIMEOUT_MS             | 5000                      | Timeout in milliseconds for Polaris to wait for an event to be republished.                                                |
 | POLARIS_KAFKA_BROKERS                       | kafka:9092,localhost:9092 | Kafka brokers used by Polaris for communication.                                                                           |
