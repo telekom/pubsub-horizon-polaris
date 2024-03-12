@@ -9,7 +9,6 @@ import de.telekom.eni.pandora.horizon.model.event.Status;
 import de.telekom.eni.pandora.horizon.mongo.model.MessageStateMongoDocument;
 import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
 import de.telekom.horizon.polaris.config.PolarisConfig;
-import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException;
 import de.telekom.horizon.polaris.service.PolarisService;
 import de.telekom.horizon.polaris.service.PodService;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
@@ -23,7 +22,12 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Scheduled task responsible for delivering events in the DELIVERING state to their respective subscribers.
@@ -47,6 +51,8 @@ public class ScheduledEventDeliveringHandler {
     private final PolarisService polarisService;
     private final PodService podService;
 
+    private final AtomicBoolean isRunning = new AtomicBoolean(false);
+
     public ScheduledEventDeliveringHandler(ThreadPoolService threadPoolService, PolarisService polarisService) {
         this.threadPoolService = threadPoolService;
         this.messageStateMongoRepo = threadPoolService.getMessageStateMongoRepo();
@@ -63,20 +69,26 @@ public class ScheduledEventDeliveringHandler {
      * It then starts a republish task for the retrieved message states.
      * </p>
      *
-     * @throws CouldNotDetermineWorkingSetException If there is an issue determining the working set.
      */
     @Scheduled(fixedDelayString = "${polaris.polling.interval-ms}", initialDelayString = "${random.int(${polaris.polling.interval-ms})}")
-    public void run() throws CouldNotDetermineWorkingSetException {
+    public void run() {
+        if (isRunning.get()) {
+            log.info("ScheduledEventDeliveringHandler is already running. Skipping this run...");
+            return;
+        }
+        isRunning.set(true);
         log.info("Start ScheduledEventDeliveringHandler");
 
         if(!polarisService.areResourcesFullySynced()) {
             log.info("Resources are not fully synced yet. Waiting for next run...");
+            isRunning.set(false);
             return;
         }
 
-        boolean areWePodZero = determinePodIndex();
+        boolean areWePodZero = podService.areWePodZero();
         if(!areWePodZero) {
             log.info("This pod ({}) is not first pod. Therefore not working on MessageStates in DELIVERING, skipping...", polarisConfig.getPodName());
+            isRunning.set(false);
             return;
         }
 
@@ -88,32 +100,32 @@ public class ScheduledEventDeliveringHandler {
         log.debug("pageable: {}", pageable);
         Slice<MessageStateMongoDocument> messageStatesSlices;
 
+        List<CompletableFuture<Void>> completableFutureList = new ArrayList<>();
+
         do {
             messageStatesSlices = messageStateMongoRepo.findByDeliveryTypeAndStatusAndModifiedLessThanEqual(DeliveryType.CALLBACK, Status.DELIVERING, upperThresholdTimestamp, pageable);
             log.debug("messageStatesSlices: {} | {}", messageStatesSlices, messageStatesSlices.get().toList());
 
             if(messageStatesSlices.getNumberOfElements() > 0) {
-                threadPoolService.startRepublishTask(messageStatesSlices);
+                CompletableFuture<Void> republishTask = threadPoolService.startRepublishTask(messageStatesSlices);
+                if (republishTask != null) {
+                    completableFutureList.add(republishTask);
+                }
             }
             pageable = pageable.next();
 
         } while(messageStatesSlices.hasNext());
 
+        // wait for tasks to complete to really finish the run
+        for(CompletableFuture<Void> completableFuture : completableFutureList) {
+            try {
+                completableFuture.get();
+            } catch (InterruptedException | ExecutionException e) {
+                log.error("Unexpected error processing event task", e);
+            }
+        }
+
         log.info("Finished ScheduledEventDeliveringHandler");
+        isRunning.set(false);
     }
-
-    /**
-     * Determines whether the current pod is the first pod based on the list of all pods.
-     *
-     * @return {@code true} if the current pod is the first pod, otherwise {@code false}.
-     * @throws CouldNotDetermineWorkingSetException If there is an issue determining the pods.
-     */
-    private boolean determinePodIndex() throws CouldNotDetermineWorkingSetException {
-        var allPods = podService.getAllPods();
-        var ourPod = polarisConfig.getPodName();
-        var index = allPods.indexOf(ourPod);
-
-        return index == 0;
-    }
-
 }

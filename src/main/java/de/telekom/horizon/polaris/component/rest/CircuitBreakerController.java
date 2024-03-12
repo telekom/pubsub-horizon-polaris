@@ -14,6 +14,7 @@ import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
 import de.telekom.horizon.polaris.task.RepublishPartialSubscriptionsTask;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,12 +23,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 
 import static org.springframework.http.HttpStatus.*;
 
 @AllArgsConstructor
 @RestController()
 @RequestMapping("circuit-breakers")
+@Slf4j
 public class CircuitBreakerController {
     private final CircuitBreakerCacheService circuitBreakerCacheService;
     private final ThreadPoolService threadPoolService;
@@ -117,7 +120,12 @@ public class CircuitBreakerController {
             partialSubscriptions.add(oPartialSubscription.get());
         }
 
-        threadPoolService.startRepublishSubscriptionIdsTask(partialSubscriptions);
+        try {
+            threadPoolService.startRepublishSubscriptionIdsTask(partialSubscriptions).get();
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("Failed to execute and wait for republish task", e);
+            throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "Failed to start republish task");
+        }
 
         return closeCircuitBreakersResponse;
     }
