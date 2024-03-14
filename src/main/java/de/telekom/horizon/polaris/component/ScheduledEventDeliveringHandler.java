@@ -27,7 +27,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Scheduled task responsible for delivering events in the DELIVERING state to their respective subscribers.
@@ -51,8 +50,6 @@ public class ScheduledEventDeliveringHandler {
     private final PolarisService polarisService;
     private final PodService podService;
 
-    private final AtomicBoolean isRunning = new AtomicBoolean(false);
-
     public ScheduledEventDeliveringHandler(ThreadPoolService threadPoolService, PolarisService polarisService) {
         this.threadPoolService = threadPoolService;
         this.messageStateMongoRepo = threadPoolService.getMessageStateMongoRepo();
@@ -72,23 +69,16 @@ public class ScheduledEventDeliveringHandler {
      */
     @Scheduled(fixedDelayString = "${polaris.polling.interval-ms}", initialDelayString = "${random.int(${polaris.polling.interval-ms})}")
     public void run() {
-        if (isRunning.get()) {
-            log.info("ScheduledEventDeliveringHandler is already running. Skipping this run...");
-            return;
-        }
-        isRunning.set(true);
         log.info("Start ScheduledEventDeliveringHandler");
 
         if(!polarisService.areResourcesFullySynced()) {
             log.info("Resources are not fully synced yet. Waiting for next run...");
-            isRunning.set(false);
             return;
         }
 
         boolean areWePodZero = podService.areWePodZero();
         if(!areWePodZero) {
             log.info("This pod ({}) is not first pod. Therefore not working on MessageStates in DELIVERING, skipping...", polarisConfig.getPodName());
-            isRunning.set(false);
             return;
         }
 
@@ -126,6 +116,5 @@ public class ScheduledEventDeliveringHandler {
         }
 
         log.info("Finished ScheduledEventDeliveringHandler");
-        isRunning.set(false);
     }
 }

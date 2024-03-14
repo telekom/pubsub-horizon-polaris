@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 // On callback -> sse
 // a) the multiplexer starts adressing the new events to the tasse and not to the dude -> no more WAITING or FAILED
@@ -52,8 +51,6 @@ public class ScheduledEventFailedHandler {
     private final PolarisService polarisService;
     private final PodService podService;
 
-    private final AtomicBoolean isRunning = new AtomicBoolean(false);
-
     public ScheduledEventFailedHandler(ThreadPoolService threadPoolService, PolarisService polarisService) {
         this.threadPoolService = threadPoolService;
         this.messageStateMongoRepo = threadPoolService.getMessageStateMongoRepo();
@@ -73,11 +70,6 @@ public class ScheduledEventFailedHandler {
      */
     @Scheduled(fixedDelayString = "${polaris.polling.interval-ms}", initialDelayString = "${random.int(${polaris.polling.interval-ms})}")
     public void run() {
-        if (isRunning.get()) {
-            log.info("ScheduledEventFailedHandler is already running. Skipping this run...");
-            return;
-        }
-        isRunning.set(true);
         log.info("Start ScheduledEventFailedHandler");
 
         if(!polarisService.areResourcesFullySynced()) {
@@ -122,6 +114,5 @@ public class ScheduledEventFailedHandler {
         }
 
         log.info("Finished ScheduledEventFailedHandler");
-        isRunning.set(false);
     }
 }
