@@ -71,6 +71,7 @@ public class ThreadPoolService {
     private final ConcurrentHashMap<CallbackKey, ListenableScheduledFuture<?>> requestingTasks;
     private final EventWriter eventWriter;
     private final MeterRegistry meterRegistry;
+    private final SubscriptionRepublishingHolder subscriptionRepublishingHolder;
 
     public ThreadPoolService(CircuitBreakerCacheService circuitBreakerCacheService,
                              HealthCheckCache healthCheckCache,
@@ -82,7 +83,8 @@ public class ThreadPoolService {
                              HorizonTracer tracer,
                              MessageStateMongoRepo messageStateMongoRepo,
                              EventWriter eventWriter,
-                             MeterRegistry meterRegistry) {
+                             MeterRegistry meterRegistry,
+                             SubscriptionRepublishingHolder subscriptionRepublishingHolder) {
         this.circuitBreakerCacheService = circuitBreakerCacheService;
         this.restClient = restClient;
         this.healthCheckCache = healthCheckCache;
@@ -94,6 +96,7 @@ public class ThreadPoolService {
         this.messageStateMongoRepo = messageStateMongoRepo;
         this.eventWriter = eventWriter;
         this.meterRegistry = meterRegistry;
+        this.subscriptionRepublishingHolder = subscriptionRepublishingHolder;
 
         this.republishingTaskExecutor = new ThreadPoolTaskExecutor();
         this.subscriptionCheckTaskExecutor = new ThreadPoolTaskExecutor();

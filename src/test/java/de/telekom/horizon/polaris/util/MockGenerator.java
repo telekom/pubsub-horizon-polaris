@@ -35,10 +35,7 @@ import de.telekom.horizon.polaris.component.HealthCheckRestClient;
 import de.telekom.horizon.polaris.config.PolarisConfig;
 import de.telekom.horizon.polaris.kubernetes.PodResourceEventHandler;
 import de.telekom.horizon.polaris.model.PartialSubscription;
-import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
-import de.telekom.horizon.polaris.service.PolarisService;
-import de.telekom.horizon.polaris.service.PodService;
-import de.telekom.horizon.polaris.service.ThreadPoolService;
+import de.telekom.horizon.polaris.service.*;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -85,6 +82,8 @@ public class MockGenerator {
 
     public static MeterRegistry meterRegistry;
 
+    public static SubscriptionRepublishingHolder subscriptionRepublishingHolder;
+
     @SneakyThrows
     public static ThreadPoolService mockThreadPoolService() {
         kafkaTemplate = mock(KafkaTemplate.class);
@@ -103,6 +102,8 @@ public class MockGenerator {
         environment = mock(Environment.class);
         eventWriter = mock(EventWriter.class);
         meterRegistry = new SimpleMeterRegistry();
+        subscriptionRepublishingHolder = new SubscriptionRepublishingHolder();
+
 
         healthCheckRestClient = mock(HealthCheckRestClient.class);
         when(environment.getActiveProfiles()).thenReturn(new String[]{"test"});
@@ -152,7 +153,7 @@ public class MockGenerator {
 
         when(kafkaTemplate.send((ProducerRecord) any())).thenReturn(mock(CompletableFuture.class));
 
-        threadPoolService = spy(new ThreadPoolService(circuitBreakerCache, healthCheckCache, partialSubscriptionCache, kafkaTemplate, polarisConfig, podService, healthCheckRestClient, tracer, messageStateMongoRepo, eventWriter, meterRegistry));
+        threadPoolService = spy(new ThreadPoolService(circuitBreakerCache, healthCheckCache, partialSubscriptionCache, kafkaTemplate, polarisConfig, podService, healthCheckRestClient, tracer, messageStateMongoRepo, eventWriter, meterRegistry, subscriptionRepublishingHolder));
 
         return threadPoolService;
     }

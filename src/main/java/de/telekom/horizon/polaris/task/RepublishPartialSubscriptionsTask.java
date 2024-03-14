@@ -4,7 +4,9 @@
 
 package de.telekom.horizon.polaris.task;
 
+import de.telekom.horizon.polaris.model.CallbackKey;
 import de.telekom.horizon.polaris.model.PartialSubscription;
+import de.telekom.horizon.polaris.service.SubscriptionRepublishingHolder;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpMethod;
@@ -22,9 +24,12 @@ import java.util.List;
 public class RepublishPartialSubscriptionsTask extends HandleSuccessfulHealthRequestTask {
     private final List<PartialSubscription> partialSubscriptions;
 
+    private final SubscriptionRepublishingHolder subscriptionRepublishingHolder;
+
     public RepublishPartialSubscriptionsTask(List<PartialSubscription> partialSubscriptions, ThreadPoolService threadPoolService) {
         super(threadPoolService);
 
+        this.subscriptionRepublishingHolder = threadPoolService.getSubscriptionRepublishingHolder();
         this.partialSubscriptions = partialSubscriptions;
     }
 
@@ -40,6 +45,13 @@ public class RepublishPartialSubscriptionsTask extends HandleSuccessfulHealthReq
             String callbackUrl = partialSubscription.callbackUrl();
             var httpMethod = partialSubscription.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
 
+            CallbackKey callbackKey = new CallbackKey(callbackUrl, httpMethod);
+            if(subscriptionRepublishingHolder.isRepublishing(callbackKey)) {
+                log.warn("Republishing already in progress for callbackUrl: {} and httpMethod: {}. skipping republishing to prevent multiple loops for single callback endpoint", callbackUrl, httpMethod);
+                return;
+            }
+            this.subscriptionRepublishingHolder.startRepublishing(callbackKey);
+
             var oHealthCheckData = healthCheckCache.get(callbackUrl, httpMethod);
             if(oHealthCheckData.isEmpty()) {
                 log.warn("Could not find a health check entry for the given callbackUrl & httpMethod. CallbackUrl: {}, HttpMethod: {}", callbackUrl, httpMethod);
@@ -53,7 +65,7 @@ public class RepublishPartialSubscriptionsTask extends HandleSuccessfulHealthReq
             log.debug("subscriptionIds: {}", subscriptionIds);
 
             republish(subscriptionIds);
-
+            this.subscriptionRepublishingHolder.indicateRepublishingFinished(callbackKey);
         }
         log.info("Finished RepublishSubscriptionIdsTask for partialSubscriptions: {}", partialSubscriptions);
     }
