@@ -7,24 +7,25 @@ package de.telekom.horizon.polaris.service;
 import de.telekom.horizon.polaris.model.CallbackKey;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 @Service
 public class SubscriptionRepublishingHolder {
 
-    private final ConcurrentHashMap<CallbackKey, AtomicBoolean> subscriptionRepublishingMap = new ConcurrentHashMap<>();
+    private final List<CallbackKey> callbackKeys = Collections.synchronizedList(new ArrayList<>());
 
     public boolean isRepublishing(CallbackKey key) {
-        return subscriptionRepublishingMap.getOrDefault(key, new AtomicBoolean(false)).get();
+        return callbackKeys.contains(key);
     }
 
     public void startRepublishing(CallbackKey key) {
-        subscriptionRepublishingMap.put(key, new AtomicBoolean(true));
+        callbackKeys.add(key);
     }
 
     public void indicateRepublishingFinished(CallbackKey key) {
-        subscriptionRepublishingMap.remove(key);
+        callbackKeys.remove(key);
     }
 
 }
