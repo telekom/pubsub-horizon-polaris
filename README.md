@@ -45,6 +45,8 @@ For the optimal setup, ensure you have:
 ./gradlew build
 ```
 
+### Docker build
+
 The default docker base image is `azul/zulu-openjdk-alpine:21-jre`. This is customizable via the docker build arg `DOCKER_BASE_IMAGE`.
 Please note that the default helm values configure the kafka compression type `snappy` which requires gcompat to be installed in the resulting image.
 So either provide a base image with gcompat installed or change/disable the compression type in the helm values.
