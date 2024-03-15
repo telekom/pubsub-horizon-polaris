@@ -93,7 +93,7 @@ Horizon Polaris includes integration tests that run against an embedded Kafka. T
 
 ## Documentation
 
-Read more about the software architecture and the general process flow of Horizon Galaxy in [docs/architecture.md](docs/architecture.md).
+Read more about the software architecture and the general process flow of Horizon Polaris in [docs/architecture.md](docs/architecture.md).
 
 ## Contributing
 
