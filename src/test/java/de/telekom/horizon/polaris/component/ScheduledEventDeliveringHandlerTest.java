@@ -82,6 +82,7 @@ class ScheduledEventDeliveringHandlerTest {
         fakePod = MockGenerator.createFakePod(POD_NAME);
 
         when(polarisService.areResourcesFullySynced()).thenReturn(true);
+        when(podService.areWePodZero()).thenReturn(true);
         when(podService.getAllPods()).thenReturn(List.of(fakePod.getMetadata().getName()));
 
 
@@ -104,7 +105,7 @@ class ScheduledEventDeliveringHandlerTest {
 
     @Test
     @DisplayName("Handle republishing message depending on")
-    void startRepublishingForMessageWhichExceedDeliveringOffset() throws CouldNotDetermineWorkingSetException {
+    void startRepublishingForMessageWhichExceedDeliveringOffset() {
         scheduledEventDeliveringHandler.run();
 
         verify(threadPoolService, times(1)).startRepublishTask(any(Slice.class));

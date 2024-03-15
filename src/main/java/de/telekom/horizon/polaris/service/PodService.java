@@ -10,7 +10,6 @@ import de.telekom.horizon.polaris.config.PolarisConfig;
 import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -44,6 +43,25 @@ public class PodService {
         }
 
         return allPods;
+    }
+
+    /**
+     * Determines whether the current pod is the first pod based on the list of all pods.
+     *
+     * @return {@code true} if the current pod is the first pod, otherwise {@code false}.
+     */
+    public boolean areWePodZero() {
+        List<String> allPods;
+        try {
+            allPods = getAllPods();
+        } catch (CouldNotDetermineWorkingSetException e) {
+            log.error("Could not check if we are pod zero", e);
+            return false;
+        }
+        var ourPod = polarisConfig.getPodName();
+        var index = allPods.indexOf(ourPod);
+
+        return index == 0;
     }
 
     /**

@@ -7,7 +7,6 @@ package de.telekom.horizon.polaris.component;
 import de.telekom.eni.pandora.horizon.mongo.model.MessageStateMongoDocument;
 import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
 import de.telekom.horizon.polaris.config.PolarisConfig;
-import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException;
 import de.telekom.horizon.polaris.service.PolarisService;
 import de.telekom.horizon.polaris.service.PodService;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
@@ -18,6 +17,11 @@ import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 // On callback -> sse
 // a) the multiplexer starts adressing the new events to the tasse and not to the dude -> no more WAITING or FAILED
@@ -63,10 +67,9 @@ public class ScheduledEventFailedHandler {
      * Otherwise, it queries the {@link MessageStateMongoRepo} for events in the FAILED state with a {@code CallbackUrlNotFoundException} and starts a republish task for them.
      * </p>
      *
-     * @throws CouldNotDetermineWorkingSetException If there is an issue determining the working set.
      */
     @Scheduled(fixedDelayString = "${polaris.polling.interval-ms}", initialDelayString = "${random.int(${polaris.polling.interval-ms})}")
-    public void run() throws CouldNotDetermineWorkingSetException {
+    public void run() {
         log.info("Start ScheduledEventFailedHandler");
 
         if(!polarisService.areResourcesFullySynced()) {
@@ -74,7 +77,7 @@ public class ScheduledEventFailedHandler {
             return;
         }
 
-        boolean areWePodZero = determinePodIndex();
+        boolean areWePodZero = podService.areWePodZero();
         if(!areWePodZero) {
             log.info("This pod ({}) is not first pod. Therefore not working on MessageStates in FAILED, skipping...", polarisConfig.getPodName());
             return;
@@ -84,31 +87,32 @@ public class ScheduledEventFailedHandler {
         Pageable pageable = PageRequest.of(0, batchSize, Sort.by(Sort.Direction.ASC, "timestamp"));
         log.debug("pageable: {}", pageable);
         Slice<MessageStateMongoDocument> messageStatesSlices;
+
+        List<CompletableFuture<Void>> completableFutureList = new ArrayList<>();
+
         do {
             messageStatesSlices = messageStateMongoRepo.findStatusFailedWithCallbackExceptionAsc(pageable);
             log.debug("messageStatesSlices: {} | {}", messageStatesSlices, messageStatesSlices.get().toList());
 
             if(messageStatesSlices.getNumberOfElements() > 0) {
-                threadPoolService.startRepublishTask(messageStatesSlices);
+                CompletableFuture<Void> republishTask = threadPoolService.startRepublishTask(messageStatesSlices);
+                if (republishTask != null) {
+                    completableFutureList.add(republishTask);
+                }
             }
 
             pageable = pageable.next();
         } while(messageStatesSlices.hasNext());
 
+        // wait for tasks to complete to really finish the run
+        for(CompletableFuture<Void> completableFuture : completableFutureList) {
+            try {
+                completableFuture.get();
+            } catch (InterruptedException | ExecutionException e) {
+                log.error("Unexpected error processing event task", e);
+            }
+        }
+
         log.info("Finished ScheduledEventFailedHandler");
-    }
-
-    /**
-     * Determines whether the current pod is the first pod based on the list of all pods.
-     *
-     * @return {@code true} if the current pod is the first pod, otherwise {@code false}.
-     * @throws CouldNotDetermineWorkingSetException If there is an issue determining the pods.
-     */
-    private boolean determinePodIndex() throws CouldNotDetermineWorkingSetException {
-        var allPods = podService.getAllPods();
-        var ourPod = polarisConfig.getPodName();
-        var index = allPods.indexOf(ourPod);
-
-        return index == 0;
     }
 }
