@@ -1,0 +1,10 @@
+# Copyright 2024 Deutsche Telekom IT GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# This is an example for a (project specific) repository configuration file.
+excludes:
+  scopes:
+    - pattern: "test.*"
+      reason: "TEST_DEPENDENCY_OF"
+      comment: "Packages for testing only."
