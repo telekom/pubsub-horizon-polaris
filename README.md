@@ -29,13 +29,13 @@ SPDX-License-Identifier: Apache-2.0
 
 Horizon Polaris serves as the circuit breaker within the [Horizon ecosystem](https://github.com/telekom/pubsub-horizon). It ensures the redelivery of failed events by periodically checking the availability of a customer's endpoint using HEAD or GET requests. When the endpoint becomes available again, all events for that customer and endpoint with the status `WAITING` are getting republished and can be picked up by Comet or Pulsar redelivery.
 
+> **Note:** Polaris is an essential part of the Horizon ecosystem. Please refer to [documentation of the entire system](https://github.com/telekom/pubsub-horizon) to get the full picture.
 
 ## Prerequisites
 For the optimal setup, ensure you have:
 
 - A running instance of Kafka
 - Access to a Kubernetes cluster on which the `Subscription` (subscriber.horizon.telekom.de) custom resource definition has been registered
-
 
 ## Building Polaris
 
