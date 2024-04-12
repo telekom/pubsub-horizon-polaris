@@ -173,7 +173,7 @@ class SimpleIntegrationTest extends AbstractIntegrationTest {
         var cbs = circuitBreakerCacheService.getCircuitBreakerMessages(0, 10000, polarisConfig.getPodName());
         assertEquals( 1, cbs.size());
 
-        Mockito.verify(threadPoolService, timeout(10000).times(1)).startHealthRequestTask( eq(wireMockServer.baseUrl() + CALLBACK_URL), anyString(), anyString(), anyString(), eq(HttpMethod.HEAD), any());
+        Mockito.verify(threadPoolService, timeout(10000).times(1)).startHealthRequestTask( eq(wireMockServer.baseUrl() + CALLBACK_URL), anyString(), anyString(), anyString(), any(), eq(HttpMethod.HEAD), any());
         Mockito.verify(circuitBreakerCacheService, timeout(10000).times(1)).updateCircuitBreakerMessage(argThat(a -> Objects.equals(a.getSubscriptionId(), SUBSCRIPTION_ID) && a.getLastHealthCheck() != null));
         wireMockServer.verify(1, headRequestedFor(urlPathEqualTo(CALLBACK_URL)));
     }

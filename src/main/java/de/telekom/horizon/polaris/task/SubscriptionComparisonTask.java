@@ -154,7 +154,7 @@ public class SubscriptionComparisonTask implements Runnable {
      *
      * @param partialSubscription
      */
-    private void cleanHealthCheckCacheFromSubscriptionId(PartialSubscription partialSubscription) {
+    public void cleanHealthCheckCacheFromSubscriptionId(PartialSubscription partialSubscription) {
         var callbackUrl = partialSubscription.callbackUrl();
         var httpMethod = partialSubscription.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
         if(callbackUrl == null) { return; }
@@ -199,7 +199,7 @@ public class SubscriptionComparisonTask implements Runnable {
             }
 
             // This is the only place where we initially start the health request task (with a delay)
-            threadPoolService.startHealthRequestTask(partialSubscription.callbackUrl(), partialSubscription.publisherId(), partialSubscription.subscriberId(), partialSubscription.environment(), currHttpMethod, cooldown);
+            threadPoolService.startHealthRequestTask(partialSubscription.callbackUrl(), partialSubscription.publisherId(), partialSubscription.subscriberId(), partialSubscription.environment(), partialSubscription.isCircuitBreakerOptOut(), currHttpMethod, cooldown);
         }
     }
 }

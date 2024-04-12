@@ -76,7 +76,7 @@ class SubscriptionComparisonTaskTest {
         subscriptionComparisonTask.run();
 
         verify(healthCheckCache, times(1)).remove(eq(CALLBACK_URL), eq(HttpMethod.HEAD), eq(SUBSCRIPTION_ID));
-        verify(threadPoolService, never()).startHealthRequestTask(eq(CALLBACK_URL), eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(HttpMethod.HEAD));
+        verify(threadPoolService, never()).startHealthRequestTask(eq(CALLBACK_URL), eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(false), eq(HttpMethod.HEAD));
         verify(threadPoolService, never()).startHandleDeliveryTypeChangeTask(eq(newPartialSubscription));
     }
 
@@ -94,7 +94,7 @@ class SubscriptionComparisonTaskTest {
 
         verify(healthCheckCache, never()).remove(eq(CALLBACK_URL), eq(HttpMethod.HEAD), eq(SUBSCRIPTION_ID));
         verify(threadPoolService, never()).startHandleDeliveryTypeChangeTask(eq(newPartialSubscription));
-        verify(threadPoolService, never()).startHealthRequestTask(eq(CALLBACK_URL), eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(HttpMethod.HEAD));
+        verify(threadPoolService, never()).startHealthRequestTask(eq(CALLBACK_URL), eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(false), eq(HttpMethod.HEAD));
     }
 
     @Test
@@ -138,7 +138,7 @@ class SubscriptionComparisonTaskTest {
         subscriptionComparisonTask = new SubscriptionComparisonTask(oldPartialSubscription, newPartialSubscription, threadPoolService);
         subscriptionComparisonTask.run();
 
-        verify(threadPoolService, times(1)).startHealthRequestTask(eq(CALLBACK_URL), eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(HttpMethod.HEAD), any());
+        verify(threadPoolService, times(1)).startHealthRequestTask(eq(CALLBACK_URL), eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(false), eq(HttpMethod.HEAD), any());
     }
 
     @Test
@@ -152,7 +152,7 @@ class SubscriptionComparisonTaskTest {
         subscriptionComparisonTask = new SubscriptionComparisonTask(oldPartialSubscription, newPartialSubscription, threadPoolService);
         subscriptionComparisonTask.run();
 
-        verify(threadPoolService, times(1)).startHealthRequestTask(eq(CALLBACK_URL), eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(HttpMethod.GET), any());
+        verify(threadPoolService, times(1)).startHealthRequestTask(eq(CALLBACK_URL), eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(false), eq(HttpMethod.GET), any());
         verify(healthCheckCache, times(1)).remove(eq(CALLBACK_URL), eq(HttpMethod.HEAD), eq(SUBSCRIPTION_ID));
     }
 
@@ -168,7 +168,7 @@ class SubscriptionComparisonTaskTest {
         subscriptionComparisonTask = new SubscriptionComparisonTask(oldPartialSubscription, newPartialSubscription, threadPoolService);
         subscriptionComparisonTask.run();
 
-        verify(threadPoolService, never()).startHealthRequestTask(any(), any(), any(), any(), any());
+        verify(threadPoolService, never()).startHealthRequestTask(any(), any(), any(), any(), any(), any());
         verify(threadPoolService, never()).startHandleDeliveryTypeChangeTask(any());
     }
 
@@ -185,7 +185,7 @@ class SubscriptionComparisonTaskTest {
         subscriptionComparisonTask = new SubscriptionComparisonTask(oldPartialSubscription, newPartialSubscription, threadPoolService);
         subscriptionComparisonTask.run();
 
-        verify(threadPoolService, times(1)).startHealthRequestTask(eq(CALLBACK_URL_NEW), eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(HttpMethod.HEAD), any());
+        verify(threadPoolService, times(1)).startHealthRequestTask(eq(CALLBACK_URL_NEW), eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(false), eq(HttpMethod.HEAD), any());
         verify(circuitBreakerCacheService, times(1)).updateCircuitBreakerMessage(argThat(cbM -> CALLBACK_URL_NEW.equals(cbM.getCallbackUrl())));
     }
 
