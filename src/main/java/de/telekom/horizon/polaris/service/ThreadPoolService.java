@@ -157,6 +157,7 @@ public class ThreadPoolService {
             if (Boolean.TRUE.equals(wasSuccessful)) {
                 startHandleSuccessfulHealthRequestTask(callbackUrl, httpMethod);
             } else {
+                // Check here because the customer can disable the circuitBreaker when the event is currently in status WAITING
                 if (isCircuitBreakerOptOut) {
                     startHandleSuccessfulHealthRequestTask(callbackUrl, httpMethod);
                 }
