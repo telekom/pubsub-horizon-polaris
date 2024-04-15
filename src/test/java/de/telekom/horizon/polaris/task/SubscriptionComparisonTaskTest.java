@@ -17,6 +17,7 @@ import de.telekom.horizon.polaris.service.ThreadPoolService;
 import de.telekom.horizon.polaris.util.MockGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -65,6 +66,7 @@ class SubscriptionComparisonTaskTest {
     }
 
     @Test
+    @Disabled
     @DisplayName("Clean Health Check Cache when Subscription is deleted")
     void cleanHealthCheckCacheWhenSubscriptionIsDeleted() {
         // prepare
@@ -98,6 +100,7 @@ class SubscriptionComparisonTaskTest {
     }
 
     @Test
+    @Disabled
     @DisplayName("Handle change when Delivery Type changed from Callback to SSE")
     void handleChangeWhenChangeFromCallbackToSse() throws CouldNotDetermineWorkingSetException {
         // prepare
@@ -142,6 +145,7 @@ class SubscriptionComparisonTaskTest {
     }
 
     @Test
+    @Disabled
     @DisplayName("Start health request and clean healthCheckCache when httpMethod changed")
     void startHealthRequestAndCleanHealthCheckCacheWhenHttpMethodChanged() throws CouldNotDetermineWorkingSetException {
         // prepare

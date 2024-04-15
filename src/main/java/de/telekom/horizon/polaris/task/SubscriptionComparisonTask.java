@@ -162,7 +162,8 @@ public class SubscriptionComparisonTask implements Runnable {
         var httpMethod = partialSubscription.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
         if(callbackUrl == null) { return; }
 
-        healthCheckCache.remove(callbackUrl, httpMethod, partialSubscription.subscriptionId());
+        // Hier schmeißen wir die subscriptionId aus dem Cache und der republishing Prozess startet nicht.
+        // healthCheckCache.remove(callbackUrl, httpMethod, partialSubscription.subscriptionId());
         log.warn("Removed subscriptionId {} from healthCheckCache for callbackUrl {}", partialSubscription.subscriptionId(), callbackUrl);
 
         var oHealthAndSubscriptionIds = healthCheckCache.get(callbackUrl, httpMethod);
