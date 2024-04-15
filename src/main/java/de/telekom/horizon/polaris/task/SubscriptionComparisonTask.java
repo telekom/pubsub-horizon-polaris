@@ -211,7 +211,7 @@ public class SubscriptionComparisonTask implements Runnable {
         healthCheckCache.remove(callbackUrl, httpMethod, partialSubscription.subscriptionId());
         log.warn("Removed subscriptionId {} from healthCheckCache for callbackUrl {}", partialSubscription.subscriptionId(), callbackUrl);
 
-        // Here is the subscriptionId empty!
+        // Here is the subscriptionId empty! Why we only delete subscriptionId and not the health data?
         var oHealthAndSubscriptionIds = healthCheckCache.get(callbackUrl, httpMethod);
         log.warn("HealthAndSubscriptionIds: {}", oHealthAndSubscriptionIds);
 
