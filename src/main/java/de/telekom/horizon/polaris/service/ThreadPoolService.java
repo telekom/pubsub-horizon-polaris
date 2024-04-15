@@ -148,6 +148,8 @@ public class ThreadPoolService {
         var key = new CallbackKey(callbackUrl, httpMethod);
         requestingTasks.remove(key);
 
+        log.warn("RequestTask for {} with circuitBreakerOptOut {}", key, isCircuitBreakerOptOut);
+
         var isCancelled = future.isCancelled(); // If StopRequestTask in threadPoolService gets called, this gets true
         if (isCancelled) {
             log.info("Thread got interrupted, will set isThreadOpen to false for callbackUrl: {} and httpMethod: {}", callbackUrl, httpMethod);
@@ -158,6 +160,7 @@ public class ThreadPoolService {
                 startHandleSuccessfulHealthRequestTask(callbackUrl, httpMethod);
             } else {
                 // Check here because the customer can disable the circuitBreaker when the event is currently in status WAITING
+                log.warn("RequestTask for {} was not successful, but circuitBreakerOptOut is {}", key, isCircuitBreakerOptOut);
                 if (isCircuitBreakerOptOut) {
                     startHandleSuccessfulHealthRequestTask(callbackUrl, httpMethod);
                 }

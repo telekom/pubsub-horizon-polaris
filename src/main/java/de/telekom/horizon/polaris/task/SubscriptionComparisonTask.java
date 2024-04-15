@@ -72,6 +72,7 @@ public class SubscriptionComparisonTask implements Runnable {
         // Handle deleted subscription
         if(currPartialSubscriptionOrNull == null) {
             cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
+            log.warn("Subscription with id {} was deleted.", subscriptionId);
             log.info("No current partial subscription found, assuming it got deleted and returning.");
             return;
         }
@@ -100,6 +101,7 @@ public class SubscriptionComparisonTask implements Runnable {
 
         } else { // no delivery type change (callback -> callback)
             if(currPartialSubscriptionOrNull.isCircuitBreakerOptOut()) {
+                log.warn("Subscription with id {} is circuit breaker opt out.", subscriptionId);
                 cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
                 String newCallbackUrlOrOldOrNull = Objects.requireNonNullElse(oldCallbackUrlOrNull, currCallbackUrlOrNull);
                 var currHttpMethod = currPartialSubscriptionOrNull.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
@@ -119,6 +121,7 @@ public class SubscriptionComparisonTask implements Runnable {
 
             var oCBMessage = circuitBreakerCache.getCircuitBreakerMessage(subscriptionId);
             if(oCBMessage.isEmpty()) { // no openCircuitBreakers for new callbackUrl -> no need to do something
+                log.warn("No circuit breaker messages found for subscription {}", currPartialSubscriptionOrNull);
                 log.info("No circuit breaker messages found for subscription {}", currPartialSubscriptionOrNull);
             } else { // new callbackUrl with openCircuitBreaker
                 cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
@@ -199,6 +202,7 @@ public class SubscriptionComparisonTask implements Runnable {
             }
 
             // This is the only place where we initially start the health request task (with a delay)
+            log.warn("Starting health request task for subscriptionId {} with cooldown {}", partialSubscription.subscriptionId(), cooldown);
             threadPoolService.startHealthRequestTask(partialSubscription.callbackUrl(), partialSubscription.publisherId(), partialSubscription.subscriberId(), partialSubscription.environment(), partialSubscription.isCircuitBreakerOptOut(), currHttpMethod, cooldown);
         }
     }

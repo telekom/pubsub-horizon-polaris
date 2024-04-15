@@ -137,6 +137,8 @@ public class CircuitBreakerManager {
         String subscriptionId = circuitBreakerMessage.getSubscriptionId();
         boolean wasCircuitBreakerMessageChanged = false;
 
+        log.warn("Claiming circuit breaker message for subscriptionId {} with status {}", subscriptionId, status);
+
         if (!podService.shouldCircuitBreakerMessageBeHandledByThisPod(circuitBreakerMessage)) {
             log.info("Claiming circuit breaker message for subscriptionId {} was not possible, because this pod should not handle this callbackUrl or it is already assigned to another pod.", subscriptionId);
             return false;
@@ -158,6 +160,7 @@ public class CircuitBreakerManager {
 
         if (CircuitBreakerStatus.OPEN.equals(status)) {
             circuitBreakerMessage.setStatus(CircuitBreakerStatus.CHECKING);
+            log.warn("Claimed circuit breaker message for subscriptionId {} with status OPEN, changing status to CHECKING", subscriptionId);
             wasCircuitBreakerMessageChanged = true;
         }
 
