@@ -163,8 +163,7 @@ public class Republisher {
         var republishSpan = tracer.startSpanFromKafkaHeaders("picked message from kafka", consumerRecord.headers());
         republishSpan.finish();
 
-        log.warn("Resetting SubscriptionEventMessage for event {} with subscriptionId {} and deliveryType {}",
-                subscriptionEventMessage.getEvent().getId(), messageState.getSubscriptionId(), messageState.getDeliveryType());
+        log.warn("Resetting SubscriptionEventMessage with subscriptionId {} and deliveryType {}", messageState.getSubscriptionId(), messageState.getDeliveryType());
 
         // Update delivery type of subscriptionEventMessage to delivery type in subscription cache
         var oPartialSubscription = partialSubscriptionCache.get(subscriptionEventMessage.getSubscriptionId());
