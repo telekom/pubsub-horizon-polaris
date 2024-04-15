@@ -164,7 +164,7 @@ public class Republisher {
         republishSpan.finish();
 
         log.warn("Resetting SubscriptionEventMessage for event {} with subscriptionId {} and deliveryType {}",
-                subscriptionEventMessage.getEvent().getId(), messageState.getSubscriptionId(), messageState.getDeliveryType();
+                subscriptionEventMessage.getEvent().getId(), messageState.getSubscriptionId(), messageState.getDeliveryType());
 
         // Update delivery type of subscriptionEventMessage to delivery type in subscription cache
         var oPartialSubscription = partialSubscriptionCache.get(subscriptionEventMessage.getSubscriptionId());
