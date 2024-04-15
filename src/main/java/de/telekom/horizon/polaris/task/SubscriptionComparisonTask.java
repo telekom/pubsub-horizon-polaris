@@ -5,7 +5,10 @@
 package de.telekom.horizon.polaris.task;
 
 import de.telekom.eni.pandora.horizon.model.event.DeliveryType;
+import de.telekom.eni.pandora.horizon.model.event.Status;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerHealthCheck;
+import de.telekom.eni.pandora.horizon.mongo.model.MessageStateMongoDocument;
+import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
 import de.telekom.horizon.polaris.cache.HealthCheckCache;
 import de.telekom.horizon.polaris.config.PolarisConfig;
 import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException;
@@ -15,10 +18,15 @@ import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
 import de.telekom.horizon.polaris.service.PodService;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpMethod;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -42,6 +50,8 @@ public class SubscriptionComparisonTask implements Runnable {
     private final PolarisConfig polarisConfig;
     private final ThreadPoolService threadPoolService;
     private final PodService podService;
+    private final MessageStateMongoRepo messageStateMongoRepo;
+
 
     public SubscriptionComparisonTask(PartialSubscription oldPartialSubscription, PartialSubscription currPartialSubscriptionOrNull, ThreadPoolService threadPoolService) {
         this.threadPoolService = threadPoolService;
@@ -51,6 +61,7 @@ public class SubscriptionComparisonTask implements Runnable {
         this.circuitBreakerCache = threadPoolService.getCircuitBreakerCacheService();
         this.polarisConfig = threadPoolService.getPolarisConfig();
         this.podService = threadPoolService.getPodService();
+        this.messageStateMongoRepo = threadPoolService.getMessageStateMongoRepo();
     }
 
     /**
@@ -102,10 +113,40 @@ public class SubscriptionComparisonTask implements Runnable {
         } else { // no delivery type change (callback -> callback)
             if(currPartialSubscriptionOrNull.isCircuitBreakerOptOut()) {
                 log.warn("Subscription with id {} is circuit breaker opt out.", subscriptionId);
-                cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);;
+
                 String newCallbackUrlOrOldOrNull = Objects.requireNonNullElse(oldCallbackUrlOrNull, currCallbackUrlOrNull);
                 var currHttpMethod = currPartialSubscriptionOrNull.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
-                threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+
+                // Check here if there are some events on status WAITING
+                int batchSize = polarisConfig.getPollingBatchSize();
+                Pageable pageable = PageRequest.of(0, batchSize, Sort.by(Sort.Direction.ASC, "timestamp"));
+
+                Slice<MessageStateMongoDocument> waitingEvents;
+                var foundWaitingEvents = false;
+
+                do {
+                    waitingEvents = messageStateMongoRepo.findByStatusInAndDeliveryTypeAndSubscriptionIdAsc(
+                            List.of(Status.WAITING), DeliveryType.CALLBACK, subscriptionId, pageable);
+
+                    if (waitingEvents != null) {
+                        log.warn("Waiting events: {}", waitingEvents.getNumberOfElements());
+                        if (!waitingEvents.isEmpty()) {
+                            threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+                            foundWaitingEvents = true;
+                        }
+                    } else {
+                        log.warn("No waiting events found for subscription {}", currPartialSubscriptionOrNull);
+                    }
+
+                    pageable = pageable.next();
+                } while (waitingEvents != null && waitingEvents.hasNext());
+
+                cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
+
+                if (!foundWaitingEvents) {
+                    threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+                }
+
                 return;
             }
 
@@ -162,18 +203,24 @@ public class SubscriptionComparisonTask implements Runnable {
         var httpMethod = partialSubscription.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
         if(callbackUrl == null) { return; }
 
-        // Hier schmeißen wir die subscriptionId aus dem Cache und der republishing Prozess startet nicht.
-        // healthCheckCache.remove(callbackUrl, httpMethod, partialSubscription.subscriptionId());
+        // Here we throw the subscriptionId out of the cache!
+        healthCheckCache.remove(callbackUrl, httpMethod, partialSubscription.subscriptionId());
         log.warn("Removed subscriptionId {} from healthCheckCache for callbackUrl {}", partialSubscription.subscriptionId(), callbackUrl);
 
+        // Here is the subscriptionId empty!
         var oHealthAndSubscriptionIds = healthCheckCache.get(callbackUrl, httpMethod);
         log.warn("HealthAndSubscriptionIds: {}", oHealthAndSubscriptionIds);
 
         if(oHealthAndSubscriptionIds.isPresent()) {
             var healthAndSubscriptionIds = oHealthAndSubscriptionIds.get();
+
+            // Is still executed!
             log.warn("SubscriptionIds: {}", healthAndSubscriptionIds.getSubscriptionIds());
             if(healthAndSubscriptionIds.getSubscriptionIds().isEmpty()) {
                 healthCheckCache.update(callbackUrl, httpMethod, false);
+                log.warn("Updated healthCheckCache for callbackUrl {}", callbackUrl);
+
+                // This is executed because subscriptionId is empty but healthCheck is currently there!
                 threadPoolService.stopHealthRequestTask(callbackUrl, httpMethod);
             }
         }

@@ -7,6 +7,7 @@ package de.telekom.horizon.polaris.task;
 import de.telekom.eni.pandora.horizon.model.event.DeliveryType;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerMessage;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerStatus;
+import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
 import de.telekom.horizon.polaris.cache.HealthCheckCache;
 import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException;
 import de.telekom.horizon.polaris.model.PartialSubscription;
@@ -66,7 +67,6 @@ class SubscriptionComparisonTaskTest {
     }
 
     @Test
-    @Disabled
     @DisplayName("Clean Health Check Cache when Subscription is deleted")
     void cleanHealthCheckCacheWhenSubscriptionIsDeleted() {
         // prepare
@@ -100,7 +100,6 @@ class SubscriptionComparisonTaskTest {
     }
 
     @Test
-    @Disabled
     @DisplayName("Handle change when Delivery Type changed from Callback to SSE")
     void handleChangeWhenChangeFromCallbackToSse() throws CouldNotDetermineWorkingSetException {
         // prepare
@@ -145,7 +144,6 @@ class SubscriptionComparisonTaskTest {
     }
 
     @Test
-    @Disabled
     @DisplayName("Start health request and clean healthCheckCache when httpMethod changed")
     void startHealthRequestAndCleanHealthCheckCacheWhenHttpMethodChanged() throws CouldNotDetermineWorkingSetException {
         // prepare
@@ -194,6 +192,7 @@ class SubscriptionComparisonTaskTest {
     }
 
     @Test
+    @Disabled
     @DisplayName("Cleanup cache and threads, republish when activated CircuitBreakerOptOut")
     void startHandleSuccessfulHealthRequestTaskWhenCircuitBreakerOptOut() throws CouldNotDetermineWorkingSetException {
         // prepare

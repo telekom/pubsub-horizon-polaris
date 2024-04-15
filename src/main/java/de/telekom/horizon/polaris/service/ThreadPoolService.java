@@ -272,6 +272,7 @@ public class ThreadPoolService {
 
     public void stopHealthRequestTask(String callbackUrl, HttpMethod httpMethod) {
         log.info("Stopping HealthRequest task for callbackUrl {}  and httpMethod {}", callbackUrl, httpMethod);
+        log.warn("Stopping HealthRequest task for callbackUrl {} and httpMethod {}", callbackUrl, httpMethod);
         var key = new CallbackKey(callbackUrl, httpMethod);
         if (!requestingTasks.containsKey(key)) {
             log.warn("RequestTask for {} not found...this should not occur. Returning", key);
