@@ -77,6 +77,7 @@ public class RepublishingTask implements Runnable {
     protected void setCircuitBreakersToRepublishing(List<String> subscriptionIds) {
         // Set CircuitBreakerMessage status to REPUBLISHING
         log.info("Updating circuit breaker messages to REPUBLISHING for {} subscriptionIds", subscriptionIds.size());
+        log.warn("Updating circuit breaker messages to REPUBLISHING for {} subscriptionIds", subscriptionIds.size());
         log.debug("subscriptionIds: {}", subscriptionIds);
         for (var subscriptionId : subscriptionIds) {
             setCircuitBreakerToRepublishing(subscriptionId);
@@ -107,6 +108,8 @@ public class RepublishingTask implements Runnable {
 
         var timestamp = new Date();
 
+        log.warn("Querying DB for subscriptionIds: {}", subscriptionIds);
+
         do {
             log.info("Loading max. {} event states from MongoDB", polarisConfig.getRepublishingBatchSize());
             messageStateMongoDocuments = getMessageStatesFromDB(subscriptionIds, timestamp, pageable);
@@ -114,6 +117,7 @@ public class RepublishingTask implements Runnable {
             log.info("Found {} event states in MongoDb", messageStateMongoDocuments.getNumberOfElements());
             log.debug("messageStateMongoDocuments: {}", messageStateMongoDocuments);
 
+            log.warn("Republishing {} event states", messageStateMongoDocuments.getNumberOfElements());
             republisher.pickAndRepublishBatch(messageStateMongoDocuments);
         } while(messageStateMongoDocuments.hasNext());
     }

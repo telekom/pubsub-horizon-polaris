@@ -55,6 +55,8 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
         }
         this.subscriptionRepublishingHolder.startRepublishing(callbackKey);
 
+        log.warn("Start HandleSuccessfulHealthRequestTask for callbackUrl: {} and httpMethod: {}", callbackUrl, httpMethod);
+
         log.info("Start HandleSuccessfulHealthRequestTask for callbackUrl: {} and httpMethod: {}", callbackUrl, httpMethod);
         var oHealthCheckData = healthCheckCache.get(callbackUrl, httpMethod);
         log.debug("callbackUrl: {}", callbackUrl);
@@ -72,6 +74,7 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
         var subscriptionIds = healthCheckCache.clearBeforeRepublishing(callbackUrl, httpMethod);
         log.debug("subscriptionIds: {}", subscriptionIds);
 
+        log.warn("Do republishing for subscriptionIds: {}", subscriptionIds);
         republish(subscriptionIds);
         this.subscriptionRepublishingHolder.indicateRepublishingFinished(callbackKey);
         log.info("Finished HandleSuccessfulHealthRequestTask for callbackUrl: {} and httpMethod: {}", callbackUrl, httpMethod);
@@ -92,6 +95,7 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
                 .map(CircuitBreakerMessage::getSubscriptionId)
                 .toList();
         log.debug("Close circuit breakers for {}/{} stillRepublishingSubscriptionIds ids {} from subscriptionIds: {}", stillRepublishingSubscriptionIds.size(), subscriptionIds.size(), stillRepublishingSubscriptionIds, subscriptionIds);
+        log.warn("Close circuit breakers for {}/{} stillRepublishingSubscriptionIds ids {} from subscriptionIds: {}", stillRepublishingSubscriptionIds.size(), subscriptionIds.size(), stillRepublishingSubscriptionIds, subscriptionIds);
         circuitBreakerCache.closeCircuitBreakersIfRepublishing(stillRepublishingSubscriptionIds); // If we close all, we can not reopen them later, because updateCircuitBreakerStatus needs an existing entry
     }
 }

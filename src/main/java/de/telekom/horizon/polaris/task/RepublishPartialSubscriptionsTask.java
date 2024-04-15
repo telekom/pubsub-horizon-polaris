@@ -64,6 +64,7 @@ public class RepublishPartialSubscriptionsTask extends HandleSuccessfulHealthReq
 
             log.debug("subscriptionIds: {}", subscriptionIds);
 
+            log.warn("Do republish for subscriptionIds: {}", subscriptionIds);
             republish(subscriptionIds);
             this.subscriptionRepublishingHolder.indicateRepublishingFinished(callbackKey);
         }
