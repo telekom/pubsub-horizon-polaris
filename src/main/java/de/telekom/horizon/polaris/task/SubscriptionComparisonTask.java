@@ -28,6 +28,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * <p>Compares current (new) subscription with old subscription.</p>
@@ -131,7 +132,10 @@ public class SubscriptionComparisonTask implements Runnable {
                     if (waitingEvents != null) {
                         log.warn("Waiting events: {}", waitingEvents.getNumberOfElements());
                         if (!waitingEvents.isEmpty()) {
-                            threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+                            CompletableFuture<Void> taskFuture = CompletableFuture.runAsync(() -> {
+                                threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+                            });
+                            taskFuture.join();
                             foundWaitingEvents = true;
                         }
                     } else {
