@@ -86,6 +86,7 @@ public class HealthRequestTask implements Callable<Boolean> {
                 wasSuccessful = polarisConfig.getSuccessfulStatusCodes().contains(statusCode);
             }
         } catch (Exception exception) {
+            log.warn("Exception in HealthRequest: {}", exception.getMessage());
             log.error("Unexpected error while executing health check request or updating health check in caches.", exception);
         }
 

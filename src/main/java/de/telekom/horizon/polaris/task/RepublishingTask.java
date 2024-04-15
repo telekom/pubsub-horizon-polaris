@@ -117,6 +117,8 @@ public class RepublishingTask implements Runnable {
             log.info("Found {} event states in MongoDb", messageStateMongoDocuments.getNumberOfElements());
             log.debug("messageStateMongoDocuments: {}", messageStateMongoDocuments);
 
+
+            // Republishing 0 event states !!!!!!
             log.warn("Republishing {} event states", messageStateMongoDocuments.getNumberOfElements());
             republisher.pickAndRepublishBatch(messageStateMongoDocuments);
         } while(messageStateMongoDocuments.hasNext());

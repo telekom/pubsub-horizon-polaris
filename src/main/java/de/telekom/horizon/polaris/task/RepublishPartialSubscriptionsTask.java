@@ -61,6 +61,7 @@ public class RepublishPartialSubscriptionsTask extends HandleSuccessfulHealthReq
             log.debug("Removing subscriptionIds from healthCheckCache, incrementing the republish count & setting isThreadOpen to false");
             // We remove the subscription ids here, and after the task is done, we stop the health request task if needed (handleRepublishingCallbackFinished)
             var subscriptionIds = healthCheckCache.clearBeforeRepublishing(callbackUrl, httpMethod, List.of(partialSubscription.subscriptionId()));
+            log.warn("subscriptionIds in RepublishPartialSubscriptionsTask: {}", subscriptionIds);
 
             log.debug("subscriptionIds: {}", subscriptionIds);
 

@@ -102,7 +102,7 @@ public class SubscriptionComparisonTask implements Runnable {
         } else { // no delivery type change (callback -> callback)
             if(currPartialSubscriptionOrNull.isCircuitBreakerOptOut()) {
                 log.warn("Subscription with id {} is circuit breaker opt out.", subscriptionId);
-                cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
+                cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);;
                 String newCallbackUrlOrOldOrNull = Objects.requireNonNullElse(oldCallbackUrlOrNull, currCallbackUrlOrNull);
                 var currHttpMethod = currPartialSubscriptionOrNull.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
                 threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
@@ -163,9 +163,14 @@ public class SubscriptionComparisonTask implements Runnable {
         if(callbackUrl == null) { return; }
 
         healthCheckCache.remove(callbackUrl, httpMethod, partialSubscription.subscriptionId());
+        log.warn("Removed subscriptionId {} from healthCheckCache for callbackUrl {}", partialSubscription.subscriptionId(), callbackUrl);
+
         var oHealthAndSubscriptionIds = healthCheckCache.get(callbackUrl, httpMethod);
+        log.warn("HealthAndSubscriptionIds: {}", oHealthAndSubscriptionIds);
+
         if(oHealthAndSubscriptionIds.isPresent()) {
             var healthAndSubscriptionIds = oHealthAndSubscriptionIds.get();
+            log.warn("SubscriptionIds: {}", healthAndSubscriptionIds.getSubscriptionIds());
             if(healthAndSubscriptionIds.getSubscriptionIds().isEmpty()) {
                 healthCheckCache.update(callbackUrl, httpMethod, false);
                 threadPoolService.stopHealthRequestTask(callbackUrl, httpMethod);

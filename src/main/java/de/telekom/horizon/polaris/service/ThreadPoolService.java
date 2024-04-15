@@ -212,6 +212,7 @@ public class ThreadPoolService {
 
     public void startHandleSuccessfulHealthRequestTask(String callbackUrl, HttpMethod httpMethod) {
         log.info("Successful HealthRequest! Starting republishing task for callbackUrl {} and httpMethod {}", callbackUrl, httpMethod);
+        log.warn("Starting republishing task for callbackUrl {} and httpMethod {}", callbackUrl, httpMethod);
         var republishingTask = new HandleSuccessfulHealthRequestTask(callbackUrl, httpMethod, this);
         var future = republishingTaskExecutor.submitCompletable(republishingTask);
         future.exceptionally(throwable -> {
