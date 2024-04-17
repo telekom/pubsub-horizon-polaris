@@ -128,20 +128,18 @@ public class SubscriptionComparisonTask implements Runnable {
                     waitingEvents = messageStateMongoRepo.findByStatusInAndDeliveryTypeAndSubscriptionIdAsc(
                             List.of(Status.WAITING), DeliveryType.CALLBACK, subscriptionId, pageable);
 
-                    if (waitingEvents != null) {
-                        log.warn("Waiting events: {}", waitingEvents.getNumberOfElements());
-                        if (!waitingEvents.isEmpty()) {
-                            log.warn("Found waiting events for subscription {} and start to handleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
-                            threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
-                        }
+                    if (!waitingEvents.isEmpty()) {
                         foundWaitingEvents = true;
 
+                        log.warn("Waiting events: {}", waitingEvents.getNumberOfElements());
+                        log.warn("Found waiting events for subscription {} and start to handleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
+                        threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
                     } else {
                         log.warn("No waiting events found for subscription {}", currPartialSubscriptionOrNull);
                     }
 
                     pageable = pageable.next();
-                } while (waitingEvents != null && waitingEvents.hasNext());
+                } while (waitingEvents.hasNext());
 
                 if (!foundWaitingEvents) {
                     log.warn("No waiting events found for subscription {} and start HandleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
