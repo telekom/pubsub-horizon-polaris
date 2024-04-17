@@ -144,7 +144,7 @@ public class SubscriptionComparisonTask implements Runnable {
                 if (!foundWaitingEvents) {
                     log.warn("No waiting events found for subscription {} and start HandleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
                     threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
-                    cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
+                    //cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
                 }
 
                 return;
