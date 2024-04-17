@@ -69,7 +69,7 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
         }
 
         log.debug("Removing subscriptionIds from healthCheckCache, incrementing the republish count & setting isThreadOpen to false");
-        // We do this, because the DUDE could (re)open a (new) circuit breaker while we are republishing.
+        // We do this, because the Comet could (re)open a (new) circuit breaker while we are republishing.
         // With this, the polaris that handles the opened circuit breaker can start a new health request task, but we only republishing the events for the current subscriptionIds
         // and also close (later) only the ones that we started with - the ones that were reopened
         var subscriptionIds = healthCheckCache.clearBeforeRepublishing(callbackUrl, httpMethod);

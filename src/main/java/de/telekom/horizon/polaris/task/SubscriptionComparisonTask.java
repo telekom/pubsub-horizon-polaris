@@ -4,6 +4,7 @@
 
 package de.telekom.horizon.polaris.task;
 
+import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import de.telekom.eni.pandora.horizon.model.event.DeliveryType;
 import de.telekom.eni.pandora.horizon.model.event.Status;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerHealthCheck;
@@ -53,7 +54,6 @@ public class SubscriptionComparisonTask implements Runnable {
     private final PodService podService;
     private final MessageStateMongoRepo messageStateMongoRepo;
 
-
     public SubscriptionComparisonTask(PartialSubscription oldPartialSubscription, PartialSubscription currPartialSubscriptionOrNull, ThreadPoolService threadPoolService) {
         this.threadPoolService = threadPoolService;
         this.oldPartialSubscription = oldPartialSubscription;
@@ -80,7 +80,6 @@ public class SubscriptionComparisonTask implements Runnable {
         String subscriptionId = oldPartialSubscription.subscriptionId();
         String oldCallbackUrlOrNull = oldPartialSubscription.callbackUrl(); // can be null if old subscription was SSE
 
-
         // Handle deleted subscription
         if(currPartialSubscriptionOrNull == null) {
             cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
@@ -102,11 +101,11 @@ public class SubscriptionComparisonTask implements Runnable {
             throw new RuntimeException(e);
         }
 
-        if(hasDeliveryTypeChanged(DeliveryType.CALLBACK, DeliveryType.SERVER_SENT_EVENT)) {
+        if (hasDeliveryTypeChanged(DeliveryType.CALLBACK, DeliveryType.SERVER_SENT_EVENT)) {
             cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
             threadPoolService.startHandleDeliveryTypeChangeTask(currPartialSubscriptionOrNull);
 
-        } else if(hasDeliveryTypeChanged(DeliveryType.SERVER_SENT_EVENT, DeliveryType.CALLBACK)) {
+        } else if (hasDeliveryTypeChanged(DeliveryType.SERVER_SENT_EVENT, DeliveryType.CALLBACK)) {
             // SSE -> Callback does not need to be handled extra, logic is same as for callback -> callback
             // If polaris dies WHILE reproducing SSE -> Callback, those messages gets LOST, bc the information is nowhere persistent
             threadPoolService.startHandleDeliveryTypeChangeTask(currPartialSubscriptionOrNull);
@@ -135,7 +134,7 @@ public class SubscriptionComparisonTask implements Runnable {
                             CompletableFuture<Void> taskFuture = CompletableFuture.runAsync(() -> {
                                 threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
                             });
-                            taskFuture.join();
+
                             foundWaitingEvents = true;
                         }
                     } else {
@@ -145,10 +144,9 @@ public class SubscriptionComparisonTask implements Runnable {
                     pageable = pageable.next();
                 } while (waitingEvents != null && waitingEvents.hasNext());
 
-                cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
-
                 if (!foundWaitingEvents) {
                     threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+                    cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
                 }
 
                 return;
