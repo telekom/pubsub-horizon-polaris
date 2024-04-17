@@ -131,12 +131,11 @@ public class SubscriptionComparisonTask implements Runnable {
                     if (waitingEvents != null) {
                         log.warn("Waiting events: {}", waitingEvents.getNumberOfElements());
                         if (!waitingEvents.isEmpty()) {
-                            CompletableFuture<Void> taskFuture = CompletableFuture.runAsync(() -> {
-                                threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
-                            });
-
-                            foundWaitingEvents = true;
+                            log.warn("Found waiting events for subscription {} and start to handleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
+                            threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
                         }
+                        foundWaitingEvents = true;
+
                     } else {
                         log.warn("No waiting events found for subscription {}", currPartialSubscriptionOrNull);
                     }
@@ -145,6 +144,7 @@ public class SubscriptionComparisonTask implements Runnable {
                 } while (waitingEvents != null && waitingEvents.hasNext());
 
                 if (!foundWaitingEvents) {
+                    log.warn("No waiting events found for subscription {} and start HandleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
                     threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
                     cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
                 }

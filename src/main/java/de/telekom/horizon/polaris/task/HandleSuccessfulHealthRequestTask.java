@@ -49,7 +49,8 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
     public void run() {
         CallbackKey callbackKey = new CallbackKey(callbackUrl, httpMethod);
 
-        log.warn("Start HandleSuccessfulHealthRequestTask for callbackUrl: {} and httpMethod: {}", callbackUrl, httpMethod);
+        // Start HandleSuccessfulHealthRequestTask for callbackUrl: xyz
+        log.warn("Start HandleSuccessfulHealthRequestTask for callbackUrl: {} and httpMethod: {}.....", callbackUrl, httpMethod);
 
         if(subscriptionRepublishingHolder.isRepublishing(callbackKey)) {
             log.warn("Republishing already in progress for callbackUrl: {} and httpMethod: {}. skipping republishing to prevent multiple loops for single callback endpoint", callbackUrl, httpMethod);
@@ -75,7 +76,7 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
         var subscriptionIds = healthCheckCache.clearBeforeRepublishing(callbackUrl, httpMethod);
         log.debug("subscriptionIds in HandleSuccessfulHealthRequestTask: {}", subscriptionIds);
 
-        // SubscriptionIds are empty here!!!!!!!!
+        // Do republishing for subscriptionIds: xyz
         log.warn("Do republishing for subscriptionIds: {}", subscriptionIds);
 
         republish(subscriptionIds);
@@ -89,6 +90,7 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
      * @param subscriptionIds The list of subscription IDs for which to republish messages.
      */
     protected void republish(List<String> subscriptionIds) {
+        // Here we are with the subscriptionId
         setCircuitBreakersToRepublishing(subscriptionIds);
         queryDbPickStatesAndRepublishMessages(subscriptionIds);
         var stillRepublishingSubscriptionIds = subscriptionIds.stream()
