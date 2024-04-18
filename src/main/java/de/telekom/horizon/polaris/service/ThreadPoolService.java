@@ -157,9 +157,10 @@ public class ThreadPoolService {
             healthCheckCache.update(callbackUrl, httpMethod, false);
         } else {
             if (Boolean.TRUE.equals(wasSuccessful)) {
+                log.warn("StartHandleSuccessfulHealthRequestTask for {} callbackUrl and httpMethod {}", callbackUrl, httpMethod);
                 startHandleSuccessfulHealthRequestTask(callbackUrl, httpMethod);
             } else {
-                log.warn("RequestTask for {} was not successful, but circuitBreakerOptOut is {}", key, isCircuitBreakerOptOut);
+                log.warn("StartHealthRequestTask for callbackUrl {} was not successful and circuitBreakerOptOut is {}", key, isCircuitBreakerOptOut);
                 startHealthRequestTask(callbackUrl, publisherId, subscriberId, environment, isCircuitBreakerOptOut, httpMethod);
             }
         }

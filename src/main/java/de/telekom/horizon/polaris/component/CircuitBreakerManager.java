@@ -115,6 +115,7 @@ public class CircuitBreakerManager {
      */
     private int claimCircuitBreakerMessagesIfPossible(List<CircuitBreakerMessage> circuitBreakerMessages) throws CouldNotDetermineWorkingSetException {
         int nrOfClaimedCircuitBreakerMessages = 0;
+        log.warn("Claiming {} circuit breaker messages", circuitBreakerMessages.size());
         for (var circuitBreakerMessage : circuitBreakerMessages) {
             boolean wasClaimed = claimCircuitBreakerMessageIfPossible(circuitBreakerMessage);
             if (wasClaimed) {
@@ -171,6 +172,9 @@ public class CircuitBreakerManager {
         PartialSubscription partialSubscription = oPartialSubscription.get();
         PartialSubscription oldPartialSubscription = new PartialSubscription(circuitBreakerMessage.getEnvironment(), subscriptionId, partialSubscription.publisherId(), circuitBreakerMessage.getSubscriberId(), circuitBreakerMessage.getCallbackUrl(), DeliveryType.CALLBACK, partialSubscription.isGetMethodInsteadOfHead(), partialSubscription.isCircuitBreakerOptOut());
 
+
+        log.warn("Old partial subscription: {}", oldPartialSubscription);
+        log.warn("New partial subscription: {}", partialSubscription);
         threadPoolService.startSubscriptionComparisonTask(oldPartialSubscription, partialSubscription);
 
         return wasCircuitBreakerMessageChanged;

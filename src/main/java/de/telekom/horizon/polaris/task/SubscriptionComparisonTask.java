@@ -125,8 +125,7 @@ public class SubscriptionComparisonTask implements Runnable {
                 var foundWaitingEvents = false;
 
                 do {
-                    waitingEvents = messageStateMongoRepo.findByStatusInAndDeliveryTypeAndSubscriptionIdAsc(
-                            List.of(Status.WAITING), DeliveryType.CALLBACK, subscriptionId, pageable);
+                    waitingEvents = messageStateMongoRepo.findByStatusInAndDeliveryTypeAndSubscriptionIdAsc(List.of(Status.WAITING), DeliveryType.CALLBACK, subscriptionId, pageable);
 
                     if (!waitingEvents.isEmpty()) {
                         foundWaitingEvents = true;
@@ -150,16 +149,19 @@ public class SubscriptionComparisonTask implements Runnable {
                 return;
             }
 
+            log.warn("Subscription with id {} is not circuit breaker opt out.", subscriptionId);
             boolean isCallbackUrlSame = Objects.equals(oldCallbackUrlOrNull, currCallbackUrlOrNull);
             if(isCallbackUrlSame) { // callbackUrl did not change -> start healthRequestTask
                 boolean didHttpMethodChange = !Objects.equals(oldPartialSubscription.isGetMethodInsteadOfHead(), currPartialSubscriptionOrNull.isGetMethodInsteadOfHead());
                 if (didHttpMethodChange) {
                     cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
                 }
+                log.warn("Subscription with id {} has the same callbackUrl {}. Starting new health request task.", subscriptionId, currCallbackUrlOrNull);
                 startNewHeathRequestTask(currPartialSubscriptionOrNull);
                 return;
             }
 
+            log.warn("Only for callbackUrl change: Subscription with id {} has a new callbackUrl {}. Old callbackUrl is {}", subscriptionId, currCallbackUrlOrNull, oldCallbackUrlOrNull);
             var oCBMessage = circuitBreakerCache.getCircuitBreakerMessage(subscriptionId);
             if(oCBMessage.isEmpty()) { // no openCircuitBreakers for new callbackUrl -> no need to do something
                 log.warn("No circuit breaker messages found for subscription {}", currPartialSubscriptionOrNull);
@@ -236,9 +238,13 @@ public class SubscriptionComparisonTask implements Runnable {
     private void startNewHeathRequestTask(PartialSubscription partialSubscription) {
         var currHttpMethod = partialSubscription.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
         var oHealthCheck = healthCheckCache.get(partialSubscription.callbackUrl(), currHttpMethod);
+        log.warn("CallbackUrl {} and SubscriptionId {} for PartialSubscription", partialSubscription.callbackUrl(), partialSubscription.subscriptionId());
+
         // true, if health request exists and no thread is open.
         // health request data needs to exist, else no subscription id for callback url was added, which means that no head request needs to be done
         boolean shouldStartHealthRequest = healthCheckCache.add(partialSubscription.callbackUrl(), currHttpMethod, partialSubscription.subscriptionId());
+        log.warn("Add callbackUrl {} and subscriptionId {} to healthCheckCache", partialSubscription.callbackUrl(), partialSubscription.subscriptionId());
+
         if (shouldStartHealthRequest) {
             var republishCount = oHealthCheck.map(HealthCheckData::getRepublishCount).orElse(0);
             var oLastCheckDate = oHealthCheck.map(HealthCheckData::getLastHealthCheckOrNull).map(CircuitBreakerHealthCheck::getLastCheckedDate);
