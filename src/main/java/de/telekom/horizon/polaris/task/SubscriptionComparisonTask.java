@@ -111,7 +111,6 @@ public class SubscriptionComparisonTask implements Runnable {
 
         } else { // no delivery type change (callback -> callback)
             if(currPartialSubscriptionOrNull.isCircuitBreakerOptOut()) {
-                log.warn("Subscription with id {} is circuit breaker opt out.", subscriptionId);
 
                 String newCallbackUrlOrOldOrNull = Objects.requireNonNullElse(oldCallbackUrlOrNull, currCallbackUrlOrNull);
                 var currHttpMethod = currPartialSubscriptionOrNull.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
