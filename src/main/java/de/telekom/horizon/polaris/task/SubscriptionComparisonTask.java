@@ -83,7 +83,6 @@ public class SubscriptionComparisonTask implements Runnable {
         // Handle deleted subscription
         if(currPartialSubscriptionOrNull == null) {
             cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
-            log.warn("Subscription with id {} was deleted.", subscriptionId);
             log.info("No current partial subscription found, assuming it got deleted and returning.");
             return;
         }
@@ -149,22 +148,18 @@ public class SubscriptionComparisonTask implements Runnable {
                 return;
             }
 
-            log.warn("Subscription with id {} is not circuit breaker opt out.", subscriptionId);
             boolean isCallbackUrlSame = Objects.equals(oldCallbackUrlOrNull, currCallbackUrlOrNull);
             if(isCallbackUrlSame) { // callbackUrl did not change -> start healthRequestTask
                 boolean didHttpMethodChange = !Objects.equals(oldPartialSubscription.isGetMethodInsteadOfHead(), currPartialSubscriptionOrNull.isGetMethodInsteadOfHead());
                 if (didHttpMethodChange) {
                     cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
                 }
-                log.warn("Subscription with id {} has the same callbackUrl {}. Starting new health request task.", subscriptionId, currCallbackUrlOrNull);
                 startNewHeathRequestTask(currPartialSubscriptionOrNull);
                 return;
             }
 
-            log.warn("Only for callbackUrl change: Subscription with id {} has a new callbackUrl {}. Old callbackUrl is {}", subscriptionId, currCallbackUrlOrNull, oldCallbackUrlOrNull);
             var oCBMessage = circuitBreakerCache.getCircuitBreakerMessage(subscriptionId);
             if(oCBMessage.isEmpty()) { // no openCircuitBreakers for new callbackUrl -> no need to do something
-                log.warn("No circuit breaker messages found for subscription {}", currPartialSubscriptionOrNull);
                 log.info("No circuit breaker messages found for subscription {}", currPartialSubscriptionOrNull);
             } else { // new callbackUrl with openCircuitBreaker
                 cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
@@ -200,29 +195,21 @@ public class SubscriptionComparisonTask implements Runnable {
      *
      * @param partialSubscription
      */
-    public void cleanHealthCheckCacheFromSubscriptionId(PartialSubscription partialSubscription) {
+    private void cleanHealthCheckCacheFromSubscriptionId(PartialSubscription partialSubscription) {
         var callbackUrl = partialSubscription.callbackUrl();
         var httpMethod = partialSubscription.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
         if(callbackUrl == null) { return; }
 
-        // Here we throw the subscriptionId out of the cache!
         healthCheckCache.remove(callbackUrl, httpMethod, partialSubscription.subscriptionId());
-        log.warn("Removed subscriptionId {} from healthCheckCache for callbackUrl {}", partialSubscription.subscriptionId(), callbackUrl);
 
-        // Here is the subscriptionId empty! Why we only delete subscriptionId and not the health data?
         var oHealthAndSubscriptionIds = healthCheckCache.get(callbackUrl, httpMethod);
-        log.warn("HealthAndSubscriptionIds: {}", oHealthAndSubscriptionIds);
 
         if(oHealthAndSubscriptionIds.isPresent()) {
             var healthAndSubscriptionIds = oHealthAndSubscriptionIds.get();
 
-            // Is still executed!
-            log.warn("SubscriptionIds: {}", healthAndSubscriptionIds.getSubscriptionIds());
             if(healthAndSubscriptionIds.getSubscriptionIds().isEmpty()) {
                 healthCheckCache.update(callbackUrl, httpMethod, false);
-                log.warn("Updated healthCheckCache for callbackUrl {}", callbackUrl);
 
-                // This is executed because subscriptionId is empty but healthCheck is currently there!
                 threadPoolService.stopHealthRequestTask(callbackUrl, httpMethod);
             }
         }
@@ -238,12 +225,10 @@ public class SubscriptionComparisonTask implements Runnable {
     private void startNewHeathRequestTask(PartialSubscription partialSubscription) {
         var currHttpMethod = partialSubscription.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
         var oHealthCheck = healthCheckCache.get(partialSubscription.callbackUrl(), currHttpMethod);
-        log.warn("CallbackUrl {} and SubscriptionId {} for PartialSubscription", partialSubscription.callbackUrl(), partialSubscription.subscriptionId());
 
         // true, if health request exists and no thread is open.
         // health request data needs to exist, else no subscription id for callback url was added, which means that no head request needs to be done
         boolean shouldStartHealthRequest = healthCheckCache.add(partialSubscription.callbackUrl(), currHttpMethod, partialSubscription.subscriptionId());
-        log.warn("Add callbackUrl {} and subscriptionId {} to healthCheckCache", partialSubscription.callbackUrl(), partialSubscription.subscriptionId());
 
         if (shouldStartHealthRequest) {
             var republishCount = oHealthCheck.map(HealthCheckData::getRepublishCount).orElse(0);
@@ -261,8 +246,7 @@ public class SubscriptionComparisonTask implements Runnable {
             }
 
             // This is the only place where we initially start the health request task (with a delay)
-            log.warn("Starting health request task for subscriptionId {} with cooldown {}", partialSubscription.subscriptionId(), cooldown);
-            threadPoolService.startHealthRequestTask(partialSubscription.callbackUrl(), partialSubscription.publisherId(), partialSubscription.subscriberId(), partialSubscription.environment(), partialSubscription.isCircuitBreakerOptOut(), currHttpMethod, cooldown);
+            threadPoolService.startHealthRequestTask(partialSubscription.callbackUrl(), partialSubscription.publisherId(), partialSubscription.subscriberId(), partialSubscription.environment(), currHttpMethod, cooldown);
         }
     }
 }

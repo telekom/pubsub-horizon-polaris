@@ -49,14 +49,10 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
     public void run() {
         CallbackKey callbackKey = new CallbackKey(callbackUrl, httpMethod);
 
-        // Start HandleSuccessfulHealthRequestTask for callbackUrl: xyz
-        log.warn("Start HandleSuccessfulHealthRequestTask for callbackUrl: {} and httpMethod: {}.....", callbackUrl, httpMethod);
-
         if(subscriptionRepublishingHolder.isRepublishing(callbackKey)) {
             log.warn("Republishing already in progress for callbackUrl: {} and httpMethod: {}. skipping republishing to prevent multiple loops for single callback endpoint", callbackUrl, httpMethod);
             return;
         }
-
         this.subscriptionRepublishingHolder.startRepublishing(callbackKey);
 
         log.info("Start HandleSuccessfulHealthRequestTask for callbackUrl: {} and httpMethod: {}", callbackUrl, httpMethod);
@@ -76,9 +72,6 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
         var subscriptionIds = healthCheckCache.clearBeforeRepublishing(callbackUrl, httpMethod);
         log.debug("subscriptionIds in HandleSuccessfulHealthRequestTask: {}", subscriptionIds);
 
-        // Do republishing for subscriptionIds: xyz
-        log.warn("Do republishing for subscriptionIds: {}", subscriptionIds);
-
         republish(subscriptionIds);
         this.subscriptionRepublishingHolder.indicateRepublishingFinished(callbackKey);
         log.info("Finished HandleSuccessfulHealthRequestTask for callbackUrl: {} and httpMethod: {}", callbackUrl, httpMethod);
@@ -90,7 +83,6 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
      * @param subscriptionIds The list of subscription IDs for which to republish messages.
      */
     protected void republish(List<String> subscriptionIds) {
-        // Here we are with the subscriptionId
         setCircuitBreakersToRepublishing(subscriptionIds);
         queryDbPickStatesAndRepublishMessages(subscriptionIds);
         var stillRepublishingSubscriptionIds = subscriptionIds.stream()
@@ -101,8 +93,6 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
                 .toList();
         log.debug("Close circuit breakers for {}/{} stillRepublishingSubscriptionIds ids {} from subscriptionIds: {}", stillRepublishingSubscriptionIds.size(), subscriptionIds.size(), stillRepublishingSubscriptionIds, subscriptionIds);
 
-        // Close circuit breakers for 0/0 stillRepublishingSubscriptionIds ids [] from subscriptionIds: []
-        log.warn("Close circuit breakers for {}/{} stillRepublishingSubscriptionIds ids {} from subscriptionIds: {}", stillRepublishingSubscriptionIds.size(), subscriptionIds.size(), stillRepublishingSubscriptionIds, subscriptionIds);
         circuitBreakerCache.closeCircuitBreakersIfRepublishing(stillRepublishingSubscriptionIds); // If we close all, we can not reopen them later, because updateCircuitBreakerStatus needs an existing entry
     }
 }

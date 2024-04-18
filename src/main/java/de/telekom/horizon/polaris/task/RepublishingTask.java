@@ -77,18 +77,15 @@ public class RepublishingTask implements Runnable {
     protected void setCircuitBreakersToRepublishing(List<String> subscriptionIds) {
         // Set CircuitBreakerMessage status to REPUBLISHING
         log.info("Updating circuit breaker messages to REPUBLISHING for {} subscriptionIds", subscriptionIds.size());
-        log.warn("Updating circuit breaker messages to REPUBLISHING for {} subscriptionIds", subscriptionIds.size());
         log.debug("subscriptionIds: {}", subscriptionIds);
         for (var subscriptionId : subscriptionIds) {
 
-            // Updating circuit breaker messages to REPUBLISHING for 1 subscriptionIds
             setCircuitBreakerToRepublishing(subscriptionId);
         }
     }
     protected void setCircuitBreakerToRepublishing(String subscriptionId) {
         log.info("Updating circuit breaker messages to REPUBLISHING for subscriptionId: {}", subscriptionId);
         var oCBMessage = circuitBreakerCache.getCircuitBreakerMessage(subscriptionId);
-        log.warn("CircuitBreakerMessage {}", oCBMessage);
         oCBMessage.ifPresent(circuitBreakerMessage -> circuitBreakerCache.updateCircuitBreakerStatus(circuitBreakerMessage.getSubscriptionId(), CircuitBreakerStatus.REPUBLISHING));
     }
 
@@ -112,9 +109,6 @@ public class RepublishingTask implements Runnable {
 
         var timestamp = new Date();
 
-        // Querying DB for subscriptionIds: xyz
-        log.warn("Querying DB for subscriptionIds: {}", subscriptionIds);
-
         do {
             log.info("Loading max. {} event states from MongoDB", polarisConfig.getRepublishingBatchSize());
             messageStateMongoDocuments = getMessageStatesFromDB(subscriptionIds, timestamp, pageable);
@@ -122,8 +116,6 @@ public class RepublishingTask implements Runnable {
             log.info("Found {} event states in MongoDb", messageStateMongoDocuments.getNumberOfElements());
             log.debug("messageStateMongoDocuments: {}", messageStateMongoDocuments);
 
-            // Republishing 5 event states. Why found here 5 not 1?
-            log.warn("Republishing {} event states", messageStateMongoDocuments.getNumberOfElements());
             republisher.pickAndRepublishBatch(messageStateMongoDocuments);
         } while(messageStateMongoDocuments.hasNext());
     }

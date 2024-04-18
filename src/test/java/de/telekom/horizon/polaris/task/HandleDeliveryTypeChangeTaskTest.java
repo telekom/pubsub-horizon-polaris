@@ -58,9 +58,11 @@ class HandleDeliveryTypeChangeTaskTest {
         var fakeDocs = MockGenerator.createFakeMessageStateMongoDocuments(10, ENV, Status.WAITING,false);
         var fakeMessageStates = new SliceImpl<>(fakeDocs, pageable, true);
 
+        // findByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual ( SSE )
         when(MockGenerator.messageStateMongoRepo.findByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual(anyList(), eq(List.of(SUBSCRIPTION_ID)), any(),  any()))
                 .thenReturn( fakeMessageStates ).thenReturn(new SliceImpl<>(new ArrayList<>()));
 
+        // findByStatusInAndDeliveryTypeAndSubscriptionIds ( CALLBACK )
         when(MockGenerator.messageStateMongoRepo.findByStatusInAndDeliveryTypeAndSubscriptionIdsAsc(anyList(), any(DeliveryType.class), anyList(), any()))
                 .thenReturn(fakeMessageStates).thenReturn(new SliceImpl<>(new ArrayList<>()));
 

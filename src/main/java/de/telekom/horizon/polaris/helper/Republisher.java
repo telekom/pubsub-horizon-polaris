@@ -72,8 +72,6 @@ public class Republisher {
 
         Map<String, String> uuidToTopic = messageStates.stream().collect(Collectors.toMap(MessageStateMongoDocument::getUuid, MessageStateMongoDocument::getTopic));
 
-        // Pick and republish 5 messages
-        log.warn("Pick and republish {} messages", messageStates.getNumberOfElements());
         List<IdentifiableMessage> identifiableMessages = pickMessages(messageStates);
 
         log.info("Republishing {} identifiableMessages", identifiableMessages.size());
@@ -164,9 +162,6 @@ public class Republisher {
     private SubscriptionEventMessage resetSubscriptionEventMessage(SubscriptionEventMessage subscriptionEventMessage, MessageStateMongoDocument messageState, ConsumerRecord<String, String> consumerRecord) {
         var republishSpan = tracer.startSpanFromKafkaHeaders("picked message from kafka", consumerRecord.headers());
         republishSpan.finish();
-
-        // Here 5!!! 4 was FAILED 1 was WAITING!!!
-        log.warn("Resetting SubscriptionEventMessage with subscriptionId {} and deliveryType {} and status {}", messageState.getSubscriptionId(), messageState.getDeliveryType(), messageState.getStatus());
 
         // Update delivery type of subscriptionEventMessage to delivery type in subscription cache
         var oPartialSubscription = partialSubscriptionCache.get(subscriptionEventMessage.getSubscriptionId());

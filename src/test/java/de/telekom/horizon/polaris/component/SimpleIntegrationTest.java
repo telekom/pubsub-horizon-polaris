@@ -92,8 +92,8 @@ class SimpleIntegrationTest extends AbstractIntegrationTest {
 
         scheduledEventWaitingHandler.loadAndProcessOpenCircuitBreakerMessagesScheduled();
 
-        Mockito.verify(circuitBreakerCacheService, timeout(300000).times(1)).updateCircuitBreakerStatus(SUBSCRIPTION_ID, CircuitBreakerStatus.REPUBLISHING);
-        Mockito.verify(circuitBreakerCacheService, timeout(300000).times(1)).closeCircuitBreaker(SUBSCRIPTION_ID);
+        Mockito.verify(circuitBreakerCacheService, timeout(30000).times(1)).updateCircuitBreakerStatus(SUBSCRIPTION_ID, CircuitBreakerStatus.REPUBLISHING);
+        Mockito.verify(circuitBreakerCacheService, timeout(30000).times(1)).closeCircuitBreaker(SUBSCRIPTION_ID);
 
         wireMockServer.verify(
                 exactly(1),
@@ -131,8 +131,8 @@ class SimpleIntegrationTest extends AbstractIntegrationTest {
 
         scheduledEventWaitingHandler.loadAndProcessOpenCircuitBreakerMessagesScheduled();
 
-        Mockito.verify(circuitBreakerCacheService, timeout(1000000).times(1)).updateCircuitBreakerStatus(SUBSCRIPTION_ID, CircuitBreakerStatus.REPUBLISHING);
-        Mockito.verify(circuitBreakerCacheService, timeout(1000000).times(1)).closeCircuitBreaker(SUBSCRIPTION_ID);
+        Mockito.verify(circuitBreakerCacheService, timeout(10000).times(1)).updateCircuitBreakerStatus(SUBSCRIPTION_ID, CircuitBreakerStatus.REPUBLISHING);
+        Mockito.verify(circuitBreakerCacheService, timeout(10000).times(1)).closeCircuitBreaker(SUBSCRIPTION_ID);
 
         wireMockServer.verify(
                 exactly(1),
@@ -173,8 +173,8 @@ class SimpleIntegrationTest extends AbstractIntegrationTest {
         var cbs = circuitBreakerCacheService.getCircuitBreakerMessages(0, 10000, polarisConfig.getPodName());
         assertEquals( 1, cbs.size());
 
-        Mockito.verify(threadPoolService, timeout(1000000).times(1)).startHealthRequestTask( eq(wireMockServer.baseUrl() + CALLBACK_URL), anyString(), anyString(), anyString(), any(), eq(HttpMethod.HEAD), any());
-        Mockito.verify(circuitBreakerCacheService, timeout(1000000).times(1)).updateCircuitBreakerMessage(argThat(a -> Objects.equals(a.getSubscriptionId(), SUBSCRIPTION_ID) && a.getLastHealthCheck() != null));
+        Mockito.verify(threadPoolService, timeout(10000).times(1)).startHealthRequestTask( eq(wireMockServer.baseUrl() + CALLBACK_URL), anyString(), anyString(), anyString(), eq(HttpMethod.HEAD), any());
+        Mockito.verify(circuitBreakerCacheService, timeout(10000).times(1)).updateCircuitBreakerMessage(argThat(a -> Objects.equals(a.getSubscriptionId(), SUBSCRIPTION_ID) && a.getLastHealthCheck() != null));
         wireMockServer.verify(1, headRequestedFor(urlPathEqualTo(CALLBACK_URL)));
     }
 

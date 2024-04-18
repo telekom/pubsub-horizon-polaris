@@ -134,7 +134,7 @@ class CircuitBreakerManagerTest {
             verify(threadPoolService, timeout(5000)).startSubscriptionComparisonTask(
                     argThat(v -> CALLBACK_URL.equals(v.callbackUrl())),
                     argThat(v -> CALLBACK_URL_NEW.equals(v.callbackUrl())));
-            verify(threadPoolService, timeout(5000)).startHealthRequestTask( eq(CALLBACK_URL_NEW) , eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(false), eq(HttpMethod.HEAD), any());
+            verify(threadPoolService, timeout(5000)).startHealthRequestTask( eq(CALLBACK_URL_NEW) , eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(HttpMethod.HEAD), any());
             Assertions.assertTrue(true);
         } catch (Exception ex) {
             Assertions.fail(ex.getMessage());
@@ -160,7 +160,7 @@ class CircuitBreakerManagerTest {
             verify(threadPoolService, timeout(5000)).startSubscriptionComparisonTask(
                     argThat(v -> CALLBACK_URL.equals(v.callbackUrl())),
                     argThat(v -> CALLBACK_URL.equals(v.callbackUrl())));
-            verify(threadPoolService, timeout(5000)).startHealthRequestTask( eq(CALLBACK_URL) , eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(false), eq(HttpMethod.HEAD), any());
+            verify(threadPoolService, timeout(5000)).startHealthRequestTask( eq(CALLBACK_URL) , eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(HttpMethod.HEAD), any());
             Assertions.assertTrue(true);
         } catch (Exception ex) {
             Assertions.fail(ex.getMessage());
@@ -191,7 +191,7 @@ class CircuitBreakerManagerTest {
 
         try {
             // republishCount = 1, therefore timeout is 2^5 => 32 minutes
-            verify(threadPoolService, timeout(5000)).startHealthRequestTask( eq(CALLBACK_URL) , eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(false), eq(HttpMethod.HEAD), eq(Duration.of(32, ChronoUnit.MINUTES)));
+            verify(threadPoolService, timeout(5000)).startHealthRequestTask( eq(CALLBACK_URL) , eq(PUBLISHER_ID), eq(SUBSCRIBER_ID), eq(ENV), eq(HttpMethod.HEAD), eq(Duration.of(32, ChronoUnit.MINUTES)));
             Assertions.assertTrue(true);
         } catch (Exception ex) {
             Assertions.fail(ex.getMessage());

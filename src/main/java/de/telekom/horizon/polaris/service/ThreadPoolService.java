@@ -144,11 +144,9 @@ public class ThreadPoolService {
         }
     }
 
-    private void handleRequestFinished(ListenableScheduledFuture<Boolean> future, Boolean wasSuccessful, String callbackUrl, String environment, Boolean isCircuitBreakerOptOut, HttpMethod httpMethod, String publisherId, String subscriberId, @Nullable Throwable throwable) {
+    private void handleRequestFinished(ListenableScheduledFuture<Boolean> future, Boolean wasSuccessful, String callbackUrl, String environment, HttpMethod httpMethod, String publisherId, String subscriberId, @Nullable Throwable throwable) {
         var key = new CallbackKey(callbackUrl, httpMethod);
         requestingTasks.remove(key);
-
-        log.warn("RequestTask for {} with circuitBreakerOptOut {}", key, isCircuitBreakerOptOut);
 
         var isCancelled = future.isCancelled(); // If StopRequestTask in threadPoolService gets called, this gets true
         if (isCancelled) {
@@ -157,11 +155,9 @@ public class ThreadPoolService {
             healthCheckCache.update(callbackUrl, httpMethod, false);
         } else {
             if (Boolean.TRUE.equals(wasSuccessful)) {
-                log.warn("StartHandleSuccessfulHealthRequestTask for {} callbackUrl and httpMethod {}", callbackUrl, httpMethod);
                 startHandleSuccessfulHealthRequestTask(callbackUrl, httpMethod);
             } else {
-                log.warn("StartHealthRequestTask for callbackUrl {} was not successful and circuitBreakerOptOut is {}", key, isCircuitBreakerOptOut);
-                startHealthRequestTask(callbackUrl, publisherId, subscriberId, environment, isCircuitBreakerOptOut, httpMethod);
+                startHealthRequestTask(callbackUrl, publisherId, subscriberId, environment, httpMethod);
             }
         }
 
@@ -209,9 +205,7 @@ public class ThreadPoolService {
 
     public void startHandleSuccessfulHealthRequestTask(String callbackUrl, HttpMethod httpMethod) {
         log.info("Successful HealthRequest! Starting republishing task for callbackUrl {} and httpMethod {}", callbackUrl, httpMethod);
-        log.warn("Starting republishing task for callbackUrl {} and httpMethod {}", callbackUrl, httpMethod);
 
-        // Starting republishing task for callbackUrl
         var republishingTask = new HandleSuccessfulHealthRequestTask(callbackUrl, httpMethod, this);
         var future = republishingTaskExecutor.submitCompletable(republishingTask);
         future.exceptionally(throwable -> {
@@ -233,13 +227,13 @@ public class ThreadPoolService {
         return future;
     }
 
-    public void startHealthRequestTask(String callbackUrl, String publisherId, String subscriberId, String environment, Boolean isCircuitBreakerOptOut, HttpMethod httpMethod) {
+    public void startHealthRequestTask(String callbackUrl, String publisherId, String subscriberId, String environment, HttpMethod httpMethod) {
         log.info("Starting HealthRequest task for callbackUrl {}, environment {} and httpMethod {},", callbackUrl, environment, httpMethod);
         Duration delay = Duration.ofMinutes(polarisConfig.getRequestDelayInbetweenMins());
-        this.startHealthRequestTask(callbackUrl, publisherId, subscriberId, environment, isCircuitBreakerOptOut, httpMethod, delay);
+        this.startHealthRequestTask(callbackUrl, publisherId, subscriberId, environment, httpMethod, delay);
     }
 
-    public ListenableScheduledFuture<Boolean> startHealthRequestTask(String callbackUrl, String publisherId, String subscriberId, String environment, Boolean isCircuitBreakerOptOut, HttpMethod httpMethod, Duration initialDelay) {
+    public ListenableScheduledFuture<Boolean> startHealthRequestTask(String callbackUrl, String publisherId, String subscriberId, String environment, HttpMethod httpMethod, Duration initialDelay) {
         log.info("Starting HealthRequest task with initialDelay {} for callbackUrl {}, environment {} and httpMethod {}", initialDelay, callbackUrl, environment, httpMethod);
 
         var key = new CallbackKey(callbackUrl, httpMethod);
@@ -257,12 +251,12 @@ public class ThreadPoolService {
         Futures.addCallback(future, new FutureCallback<>() {
             @Override
             public void onSuccess(Boolean wasSuccessful) {
-                handleRequestFinished(future, wasSuccessful, callbackUrl, environment, isCircuitBreakerOptOut, httpMethod, publisherId, subscriberId,null);
+                handleRequestFinished(future, wasSuccessful, callbackUrl, environment, httpMethod, publisherId, subscriberId,null);
             }
 
             @Override
             public void onFailure(Throwable throwable) {
-                handleRequestFinished(future, false, callbackUrl, environment, isCircuitBreakerOptOut, httpMethod, publisherId, subscriberId, throwable);
+                handleRequestFinished(future, false, callbackUrl, environment, httpMethod, publisherId, subscriberId, throwable);
             }
         }, MoreExecutors.directExecutor()); // Careful: Do not use directExecutor on heavy-weight task.
         // We only can do it bc we are just doing logs. Will be executor in ThreadPoolService Thread (this)
@@ -271,7 +265,6 @@ public class ThreadPoolService {
 
     public void stopHealthRequestTask(String callbackUrl, HttpMethod httpMethod) {
         log.info("Stopping HealthRequest task for callbackUrl {}  and httpMethod {}", callbackUrl, httpMethod);
-        log.warn("Stopping HealthRequest task for callbackUrl {} and httpMethod {}", callbackUrl, httpMethod);
         var key = new CallbackKey(callbackUrl, httpMethod);
         if (!requestingTasks.containsKey(key)) {
             log.warn("RequestTask for {} not found...this should not occur. Returning", key);
