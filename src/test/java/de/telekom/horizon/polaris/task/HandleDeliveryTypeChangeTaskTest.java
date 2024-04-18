@@ -58,12 +58,9 @@ class HandleDeliveryTypeChangeTaskTest {
         var fakeDocs = MockGenerator.createFakeMessageStateMongoDocuments(10, ENV, Status.WAITING,false);
         var fakeMessageStates = new SliceImpl<>(fakeDocs, pageable, true);
 
-        // findByStatusInPlusCallbackUrlNotFoundException ( SSE )
-        when(MockGenerator.messageStateMongoRepo.findByStatusInPlusCallbackUrlNotFoundExceptionAsc(anyList(), eq(List.of(SUBSCRIPTION_ID)), any(),  any()))
+        when(MockGenerator.messageStateMongoRepo.findByStatusWaitingOrFailedWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual(anyList(), eq(List.of(SUBSCRIPTION_ID)), any(),  any()))
                 .thenReturn( fakeMessageStates ).thenReturn(new SliceImpl<>(new ArrayList<>()));
 
-
-        // findByStatusInAndDeliveryTypeAndSubscriptionIds ( CALLBACK )
         when(MockGenerator.messageStateMongoRepo.findByStatusInAndDeliveryTypeAndSubscriptionIdsAsc(anyList(), any(DeliveryType.class), anyList(), any()))
                 .thenReturn(fakeMessageStates).thenReturn(new SliceImpl<>(new ArrayList<>()));
 
@@ -77,8 +74,10 @@ class HandleDeliveryTypeChangeTaskTest {
 
         handleDeliveryTypeChangeTask.run();
 
-        verify(MockGenerator.messageStateMongoRepo, times(2)).findByStatusInAndDeliveryTypeAndSubscriptionIdsAsc( anyList(), any(DeliveryType.class), eq(List.of(SUBSCRIPTION_ID)), any(Pageable.class));
-        verify(MockGenerator.messageStateMongoRepo, never()).findByStatusInPlusCallbackUrlNotFoundExceptionAsc( anyList(), anyList(), any(), any(Pageable.class));
+        verify(MockGenerator.messageStateMongoRepo, times(2))
+                .findByStatusInAndDeliveryTypeAndSubscriptionIdsAsc( anyList(), any(DeliveryType.class), eq(List.of(SUBSCRIPTION_ID)), any(Pageable.class));
+        verify(MockGenerator.messageStateMongoRepo, never()).
+                findByStatusWaitingOrFailedWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual( anyList(), anyList(), any(), any(Pageable.class));
     }
 
     @Test
@@ -89,7 +88,7 @@ class HandleDeliveryTypeChangeTaskTest {
         handleDeliveryTypeChangeTask.run();
 
         verify(MockGenerator.messageStateMongoRepo, never()).findByStatusInAndDeliveryTypeAndSubscriptionIdsAsc( anyList(), any(DeliveryType.class), eq(List.of(SUBSCRIPTION_ID)), any(Pageable.class));
-        verify(MockGenerator.messageStateMongoRepo, times(2)).findByStatusInPlusCallbackUrlNotFoundExceptionAsc( anyList(), anyList(), any(), any(Pageable.class));
+        verify(MockGenerator.messageStateMongoRepo, times(2)).findByStatusWaitingOrFailedWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual( anyList(), anyList(), any(), any(Pageable.class));
     }
 
     @ParameterizedTest
