@@ -201,15 +201,11 @@ public class SubscriptionComparisonTask implements Runnable {
         if(callbackUrl == null) { return; }
 
         healthCheckCache.remove(callbackUrl, httpMethod, partialSubscription.subscriptionId());
-
         var oHealthAndSubscriptionIds = healthCheckCache.get(callbackUrl, httpMethod);
-
         if(oHealthAndSubscriptionIds.isPresent()) {
             var healthAndSubscriptionIds = oHealthAndSubscriptionIds.get();
-
             if(healthAndSubscriptionIds.getSubscriptionIds().isEmpty()) {
                 healthCheckCache.update(callbackUrl, httpMethod, false);
-
                 threadPoolService.stopHealthRequestTask(callbackUrl, httpMethod);
             }
         }
@@ -225,11 +221,9 @@ public class SubscriptionComparisonTask implements Runnable {
     private void startNewHeathRequestTask(PartialSubscription partialSubscription) {
         var currHttpMethod = partialSubscription.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
         var oHealthCheck = healthCheckCache.get(partialSubscription.callbackUrl(), currHttpMethod);
-
         // true, if health request exists and no thread is open.
         // health request data needs to exist, else no subscription id for callback url was added, which means that no head request needs to be done
         boolean shouldStartHealthRequest = healthCheckCache.add(partialSubscription.callbackUrl(), currHttpMethod, partialSubscription.subscriptionId());
-
         if (shouldStartHealthRequest) {
             var republishCount = oHealthCheck.map(HealthCheckData::getRepublishCount).orElse(0);
             var oLastCheckDate = oHealthCheck.map(HealthCheckData::getLastHealthCheckOrNull).map(CircuitBreakerHealthCheck::getLastCheckedDate);

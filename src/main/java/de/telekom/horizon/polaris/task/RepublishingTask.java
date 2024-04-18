@@ -79,7 +79,6 @@ public class RepublishingTask implements Runnable {
         log.info("Updating circuit breaker messages to REPUBLISHING for {} subscriptionIds", subscriptionIds.size());
         log.debug("subscriptionIds: {}", subscriptionIds);
         for (var subscriptionId : subscriptionIds) {
-
             setCircuitBreakerToRepublishing(subscriptionId);
         }
     }

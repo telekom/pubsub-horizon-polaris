@@ -70,7 +70,7 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
         // With this, the polaris that handles the opened circuit breaker can start a new health request task, but we only republishing the events for the current subscriptionIds
         // and also close (later) only the ones that we started with - the ones that were reopened
         var subscriptionIds = healthCheckCache.clearBeforeRepublishing(callbackUrl, httpMethod);
-        log.debug("subscriptionIds in HandleSuccessfulHealthRequestTask: {}", subscriptionIds);
+        log.debug("subscriptionIds: {}", subscriptionIds);
 
         republish(subscriptionIds);
         this.subscriptionRepublishingHolder.indicateRepublishingFinished(callbackKey);
@@ -92,7 +92,6 @@ public class HandleSuccessfulHealthRequestTask extends RepublishingTask {
                 .map(CircuitBreakerMessage::getSubscriptionId)
                 .toList();
         log.debug("Close circuit breakers for {}/{} stillRepublishingSubscriptionIds ids {} from subscriptionIds: {}", stillRepublishingSubscriptionIds.size(), subscriptionIds.size(), stillRepublishingSubscriptionIds, subscriptionIds);
-
         circuitBreakerCache.closeCircuitBreakersIfRepublishing(stillRepublishingSubscriptionIds); // If we close all, we can not reopen them later, because updateCircuitBreakerStatus needs an existing entry
     }
 }

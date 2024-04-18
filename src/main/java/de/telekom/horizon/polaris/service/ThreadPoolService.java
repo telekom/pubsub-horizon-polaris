@@ -31,7 +31,6 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -205,7 +204,6 @@ public class ThreadPoolService {
 
     public void startHandleSuccessfulHealthRequestTask(String callbackUrl, HttpMethod httpMethod) {
         log.info("Successful HealthRequest! Starting republishing task for callbackUrl {} and httpMethod {}", callbackUrl, httpMethod);
-
         var republishingTask = new HandleSuccessfulHealthRequestTask(callbackUrl, httpMethod, this);
         var future = republishingTaskExecutor.submitCompletable(republishingTask);
         future.exceptionally(throwable -> {
