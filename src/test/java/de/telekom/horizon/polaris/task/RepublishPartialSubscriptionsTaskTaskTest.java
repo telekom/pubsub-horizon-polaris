@@ -55,8 +55,8 @@ class RepublishPartialSubscriptionsTaskTaskTest {
         var fakeDocs = MockGenerator.createFakeMessageStateMongoDocuments(10, ENV, Status.WAITING,false);
         var fakeMessageStates = new SliceImpl<>(fakeDocs, pageable, true);
 
-        // findByStatusWaitingOrFailedWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual ( SSE )
-        when(MockGenerator.messageStateMongoRepo.findByStatusWaitingOrFailedWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual(anyList(), eq(List.of(SUBSCRIPTION_ID)), any(), any()))
+        // findByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual ( SSE )
+        when(MockGenerator.messageStateMongoRepo.findByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual(anyList(), eq(List.of(SUBSCRIPTION_ID)), any(), any()))
                 .thenReturn( fakeMessageStates ).thenReturn( new SliceImpl<>(new ArrayList<>()) );
 
         // findByStatusInAndDeliveryTypeAndSubscriptionIds ( CALLBACK )

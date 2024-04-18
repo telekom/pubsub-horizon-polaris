@@ -48,7 +48,7 @@ repositories {
 
 def httpClientVersion = '4.5.13'
 // ENI
-def horizonParentVersion='0.0.0-feature-new-mongo-query-to-fix-processed-msg-SNAPSHOT'
+def horizonParentVersion='4.0.5'
 
 dependencies {
     // Spring

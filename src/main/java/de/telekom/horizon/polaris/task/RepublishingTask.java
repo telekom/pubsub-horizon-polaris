@@ -94,8 +94,8 @@ public class RepublishingTask implements Runnable {
 
     protected Slice<MessageStateMongoDocument> getMessageStatesFromDB(List<String> subscriptionIds, Date timestampLessThan, Pageable pageable) {
         // Get where delivery type == callback && status == WAITING, FAILED (CallbackUrlNotFoundException) (others get processed by scheduled delivering/failed task)
-        log.info("Call findByStatusWaitingOrFailedWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual with subscriptionIds: {} and pageable: {}", subscriptionIds, pageable);
-        return messageStateMongoRepo.findByStatusWaitingOrFailedWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual(List.of(Status.WAITING, Status.FAILED), subscriptionIds, timestampLessThan, pageable);
+        log.info("Call findByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual with subscriptionIds: {} and pageable: {}", subscriptionIds, pageable);
+        return messageStateMongoRepo.findByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual(List.of(Status.WAITING, Status.FAILED), subscriptionIds, timestampLessThan, pageable);
 
     }
 
