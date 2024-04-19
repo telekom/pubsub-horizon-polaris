@@ -4,8 +4,12 @@
 
 package de.telekom.horizon.polaris.task;
 
+import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import de.telekom.eni.pandora.horizon.model.event.DeliveryType;
+import de.telekom.eni.pandora.horizon.model.event.Status;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerHealthCheck;
+import de.telekom.eni.pandora.horizon.mongo.model.MessageStateMongoDocument;
+import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
 import de.telekom.horizon.polaris.cache.HealthCheckCache;
 import de.telekom.horizon.polaris.config.PolarisConfig;
 import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException;
@@ -15,11 +19,17 @@ import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
 import de.telekom.horizon.polaris.service.PodService;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpMethod;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * <p>Compares current (new) subscription with old subscription.</p>
@@ -42,6 +52,7 @@ public class SubscriptionComparisonTask implements Runnable {
     private final PolarisConfig polarisConfig;
     private final ThreadPoolService threadPoolService;
     private final PodService podService;
+    private final MessageStateMongoRepo messageStateMongoRepo;
 
     public SubscriptionComparisonTask(PartialSubscription oldPartialSubscription, PartialSubscription currPartialSubscriptionOrNull, ThreadPoolService threadPoolService) {
         this.threadPoolService = threadPoolService;
@@ -51,6 +62,7 @@ public class SubscriptionComparisonTask implements Runnable {
         this.circuitBreakerCache = threadPoolService.getCircuitBreakerCacheService();
         this.polarisConfig = threadPoolService.getPolarisConfig();
         this.podService = threadPoolService.getPodService();
+        this.messageStateMongoRepo = threadPoolService.getMessageStateMongoRepo();
     }
 
     /**
@@ -67,7 +79,6 @@ public class SubscriptionComparisonTask implements Runnable {
     public void run() {
         String subscriptionId = oldPartialSubscription.subscriptionId();
         String oldCallbackUrlOrNull = oldPartialSubscription.callbackUrl(); // can be null if old subscription was SSE
-
 
         // Handle deleted subscription
         if(currPartialSubscriptionOrNull == null) {
@@ -89,21 +100,50 @@ public class SubscriptionComparisonTask implements Runnable {
             throw new RuntimeException(e);
         }
 
-        if(hasDeliveryTypeChanged(DeliveryType.CALLBACK, DeliveryType.SERVER_SENT_EVENT)) {
+        if (hasDeliveryTypeChanged(DeliveryType.CALLBACK, DeliveryType.SERVER_SENT_EVENT)) {
             cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
             threadPoolService.startHandleDeliveryTypeChangeTask(currPartialSubscriptionOrNull);
 
-        } else if(hasDeliveryTypeChanged(DeliveryType.SERVER_SENT_EVENT, DeliveryType.CALLBACK)) {
+        } else if (hasDeliveryTypeChanged(DeliveryType.SERVER_SENT_EVENT, DeliveryType.CALLBACK)) {
             // SSE -> Callback does not need to be handled extra, logic is same as for callback -> callback
             // If polaris dies WHILE reproducing SSE -> Callback, those messages gets LOST, bc the information is nowhere persistent
             threadPoolService.startHandleDeliveryTypeChangeTask(currPartialSubscriptionOrNull);
 
         } else { // no delivery type change (callback -> callback)
             if(currPartialSubscriptionOrNull.isCircuitBreakerOptOut()) {
-                cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
+
                 String newCallbackUrlOrOldOrNull = Objects.requireNonNullElse(oldCallbackUrlOrNull, currCallbackUrlOrNull);
                 var currHttpMethod = currPartialSubscriptionOrNull.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
-                threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+
+                // Check here if there are some events on status WAITING
+                int batchSize = polarisConfig.getPollingBatchSize();
+                Pageable pageable = PageRequest.of(0, batchSize, Sort.by(Sort.Direction.ASC, "timestamp"));
+
+                Slice<MessageStateMongoDocument> waitingEvents;
+                var foundWaitingEvents = false;
+
+                do {
+                    waitingEvents = messageStateMongoRepo.findByStatusInAndDeliveryTypeAndSubscriptionIdAsc(List.of(Status.WAITING), DeliveryType.CALLBACK, subscriptionId, pageable);
+
+                    if (!waitingEvents.isEmpty()) {
+                        foundWaitingEvents = true;
+
+                        log.warn("Waiting events: {}", waitingEvents.getNumberOfElements());
+                        log.warn("Found waiting events for subscription {} and start to handleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
+                        threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+                    } else {
+                        log.warn("No waiting events found for subscription {}", currPartialSubscriptionOrNull);
+                    }
+
+                    pageable = pageable.next();
+                } while (waitingEvents.hasNext());
+
+                if (!foundWaitingEvents) {
+                    log.warn("No waiting events found for subscription {} and start HandleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
+                    threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+                    //cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
+                }
+
                 return;
             }
 

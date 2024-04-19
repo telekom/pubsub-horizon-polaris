@@ -71,6 +71,7 @@ public class Republisher {
         if(messageStates.getNumberOfElements() <= 0) { return; }
 
         Map<String, String> uuidToTopic = messageStates.stream().collect(Collectors.toMap(MessageStateMongoDocument::getUuid, MessageStateMongoDocument::getTopic));
+
         List<IdentifiableMessage> identifiableMessages = pickMessages(messageStates);
 
         log.info("Republishing {} identifiableMessages", identifiableMessages.size());

@@ -274,7 +274,7 @@ flowchart TD
     style Start stroke:green,stroke-width:2px
     SetCBToREPUBLISHING(Set CB-Msg to REPUBLISHING)
     CloseCircuitBreaker(Close CircuitBreaker)
-    FindByStatusInPlusCallbackUrlNotFoundExceptionAsc(Find StatusMessages in\nWAITING\nor\nFAILED with CallbackUrlException\n for CB-Msgs)
+    FindByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual(Find StatusMessages in\nWAITING\nor\nFAILED with CallbackUrlException\n for CB-Msgs)
     FindByStatusInAndDeliveryTypeAndSubscriptionIdsAsc(Find StatusMessages with delivery type SSE\n for CB-Msgs)
     PickMessagesFromKafka(Pick SubscriptionEventMessages from Kafka)
     SendFAILEDStatusMsgToKafka(Send FAILED StatusMessage to Kafka)
@@ -285,10 +285,9 @@ flowchart TD
     Start --> SetCBToREPUBLISHING
     SetCBToREPUBLISHING --> WasDeliveryTypeToCallback
     WasDeliveryTypeToCallback --> |Yes| FindByStatusInAndDeliveryTypeAndSubscriptionIdsAsc
-    WasDeliveryTypeToCallback --> |No| FindByStatusInPlusCallbackUrlNotFoundExceptionAsc
-
+    WasDeliveryTypeToCallback --> |No| FindByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual
     FindByStatusInAndDeliveryTypeAndSubscriptionIdsAsc --> PickMessagesFromKafka
-    FindByStatusInPlusCallbackUrlNotFoundExceptionAsc --> PickMessagesFromKafka
+  FindByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual --> PickMessagesFromKafka
     PickMessagesFromKafka --> |Successful| SendSubEventMsgToKafka
     PickMessagesFromKafka --> |Unsuccessful| SendFAILEDStatusMsgToKafka
 
@@ -314,15 +313,15 @@ flowchart TD
 
     SetCBToREPUBLISHING(Set CB-Msgs to REPUBLISHING)
     CloseCircuitBreaker(Close CircuitBreakers)
-    FindByStatusInPlusCallbackUrlNotFoundExceptionAsc(Find StatusMessages in\nWAITING\nor\nFAILED with CallbackUrlException\n for CB-Msgs)
+  FindByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual(Find StatusMessages in\nWAITING\nor\nFAILED with CallbackUrlException\n for CB-Msgs)
     PickMessagesFromKafka(Pick SubscriptionEventMessages from Kafka)
     SendFAILEDStatusMsgToKafka(Send FAILED StatusMessage to Kafka)
     SendSubEventMsgToKafka(Send SubscriptionEventMessage with PROCESSED to Kafka)
 
 
     IncrementRepublishCount --> SetCBToREPUBLISHING
-    SetCBToREPUBLISHING --> FindByStatusInPlusCallbackUrlNotFoundExceptionAsc
-    FindByStatusInPlusCallbackUrlNotFoundExceptionAsc --> PickMessagesFromKafka
+    SetCBToREPUBLISHING --> FindByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual
+  FindByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual --> PickMessagesFromKafka
     PickMessagesFromKafka --> |Successful| SendSubEventMsgToKafka
     PickMessagesFromKafka --> |Unsuccessful| SendFAILEDStatusMsgToKafka
 

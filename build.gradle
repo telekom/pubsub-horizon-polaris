@@ -48,7 +48,7 @@ repositories {
 
 def httpClientVersion = '4.5.13'
 // ENI
-def horizonParentVersion='4.0.3'
+def horizonParentVersion='4.0.5'
 
 dependencies {
     // Spring

@@ -7,7 +7,10 @@ package de.telekom.horizon.polaris.task;
 import de.telekom.eni.pandora.horizon.model.event.DeliveryType;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerMessage;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerStatus;
+import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
 import de.telekom.horizon.polaris.cache.HealthCheckCache;
+import de.telekom.horizon.polaris.component.HealthCheckRestClient;
+import de.telekom.horizon.polaris.config.PolarisConfig;
 import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException;
 import de.telekom.horizon.polaris.model.PartialSubscription;
 import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
@@ -17,14 +20,21 @@ import de.telekom.horizon.polaris.service.ThreadPoolService;
 import de.telekom.horizon.polaris.util.MockGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.Spy;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.http.HttpMethod;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 import static de.telekom.horizon.polaris.TestConstants.*;
@@ -52,16 +62,34 @@ class SubscriptionComparisonTaskTest {
     PolarisService polarisService;
     @Mock
     PodService podService;
-
+    @Mock
+    PolarisConfig polarisConfig;
     @Mock
     CircuitBreakerCacheService circuitBreakerCacheService;
 
+    @MockBean
+    MessageStateMongoRepo messageStateMongoRepo;
+
     @BeforeEach
     void prepare() {
+        threadPoolService = MockGenerator.mockThreadPoolService();
+
         when(threadPoolService.getHealthCheckCache()).thenReturn(healthCheckCache);
         when(threadPoolService.getPodService()).thenReturn(podService);
-//        when(threadPoolService.getPolarisService()).thenReturn(polarisService);
+
+        // when(threadPoolService.getPolarisService()).thenReturn(polarisService);
         when(threadPoolService.getCircuitBreakerCacheService()).thenReturn(circuitBreakerCacheService);
+
+        when(threadPoolService.getPolarisConfig()).thenReturn(polarisConfig);
+        when(polarisConfig.getPollingBatchSize()).thenReturn(10);
+
+        when(threadPoolService.getMessageStateMongoRepo()).thenReturn(messageStateMongoRepo);
+        when(messageStateMongoRepo.findByStatusInAndDeliveryTypeAndSubscriptionIdAsc(
+                anyList(),
+                eq(DeliveryType.CALLBACK),
+                anyString(),
+                any(Pageable.class))
+        ).thenReturn(new SliceImpl<>(Collections.emptyList()));
     }
 
     @Test

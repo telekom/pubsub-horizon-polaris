@@ -107,7 +107,7 @@ class RepublishingTaskTest {
     @Test
     @DisplayName("should query Db, PickStates and RepublishMessages")
     void shouldQueryDbPickStatesAndRepublishMessages() {
-        when(MockGenerator.messageStateMongoRepo.findByStatusInPlusCallbackUrlNotFoundExceptionAsc(anyList(), eq(fakeMessageStatesSubscriptionIds), any(), any()))
+        when(MockGenerator.messageStateMongoRepo.findByStatusWaitingOrWithCallbackExceptionAndSubscriptionIdsAndTimestampLessThanEqual(anyList(), eq(fakeMessageStatesSubscriptionIds), any(), any()))
                 .thenReturn( fakeMessageStates ).thenReturn( new SliceImpl<>(new ArrayList<>()) );
 
         republishingTask = spy(new RepublishingTask(threadPoolService));
