@@ -4,34 +4,36 @@
 
 package de.telekom.horizon.polaris.cache;
 
+import de.telekom.eni.pandora.horizon.cache.service.JsonCacheService;
+import de.telekom.eni.pandora.horizon.exception.JsonCacheException;
+import de.telekom.eni.pandora.horizon.kubernetes.resource.SubscriptionResource;
 import de.telekom.horizon.polaris.model.PartialSubscription;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Component
 public class PartialSubscriptionCache {
-    private final ConcurrentHashMap<String, PartialSubscription> cache = new ConcurrentHashMap<>();
 
-    public void add(PartialSubscription partialSubscription) {
-        cache.put(partialSubscription.subscriptionId(), partialSubscription);
+    private final JsonCacheService<SubscriptionResource> cache;
+
+    public PartialSubscriptionCache(JsonCacheService<SubscriptionResource> cache) {
+        this.cache = cache;
     }
-
-    public void remove(String subscriptionId) {
-        cache.remove(subscriptionId);
-    }
-
-    public void remove(PartialSubscription partialSubscription) {
-        cache.remove(partialSubscription.subscriptionId());
-    }
-
 
     public Optional<PartialSubscription> get(String subscriptionId) {
-        return Optional.ofNullable(cache.get(subscriptionId));
+        try {
+            return cache.getByKey(subscriptionId).map(PartialSubscription::fromSubscriptionResource);
+        } catch (JsonCacheException e) {
+            log.error("Could not get SubscriptionId from cache", e);
+        }
+
+        return Optional.empty();
     }
 
-    public Optional<PartialSubscription> get(PartialSubscription partialSubscription) {
-        return Optional.ofNullable(cache.get(partialSubscription.subscriptionId()));
+    public Optional<PartialSubscription> get(PartialSubscription partialSubscription) throws JsonCacheException {
+        return get(partialSubscription.subscriptionId());
     }
 }

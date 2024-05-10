@@ -32,9 +32,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import java.time.Duration;
 import java.util.Date;
-import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import static de.telekom.horizon.polaris.TestConstants.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -62,7 +60,7 @@ class RepublisherTest {
 
     @BeforeEach
     void prepare() {
-
+        MockGenerator.mockThreadPoolService();
 
         when(tracer.startScopedSpan(any())).thenReturn(mock(ScopedSpan.class));
 

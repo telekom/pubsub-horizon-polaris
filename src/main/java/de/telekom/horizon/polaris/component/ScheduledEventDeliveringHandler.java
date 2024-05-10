@@ -9,9 +9,8 @@ import de.telekom.eni.pandora.horizon.model.event.Status;
 import de.telekom.eni.pandora.horizon.mongo.model.MessageStateMongoDocument;
 import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
 import de.telekom.horizon.polaris.config.PolarisConfig;
-import de.telekom.horizon.polaris.service.PolarisService;
-import de.telekom.horizon.polaris.service.PodService;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
+import de.telekom.horizon.polaris.service.WorkerService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -47,15 +46,13 @@ public class ScheduledEventDeliveringHandler {
     private final ThreadPoolService threadPoolService;
     private final MessageStateMongoRepo messageStateMongoRepo;
     private final PolarisConfig polarisConfig;
-    private final PolarisService polarisService;
-    private final PodService podService;
+    private final WorkerService workerService;
 
-    public ScheduledEventDeliveringHandler(ThreadPoolService threadPoolService, PolarisService polarisService) {
+    public ScheduledEventDeliveringHandler(ThreadPoolService threadPoolService) {
         this.threadPoolService = threadPoolService;
         this.messageStateMongoRepo = threadPoolService.getMessageStateMongoRepo();
         this.polarisConfig = threadPoolService.getPolarisConfig();
-        this.polarisService = polarisService;
-        this.podService = threadPoolService.getPodService();
+        this.workerService = threadPoolService.getWorkerService();
     }
 
     /**
@@ -69,52 +66,47 @@ public class ScheduledEventDeliveringHandler {
      */
     @Scheduled(fixedDelayString = "${polaris.polling.interval-ms}", initialDelayString = "${random.int(${polaris.polling.interval-ms})}")
     public void run() {
-        log.info("Start ScheduledEventDeliveringHandler");
-
-        if(!polarisService.areResourcesFullySynced()) {
-            log.info("Resources are not fully synced yet. Waiting for next run...");
-            return;
-        }
-
-        boolean areWePodZero = podService.areWePodZero();
-        if(!areWePodZero) {
-            log.info("This pod ({}) is not first pod. Therefore not working on MessageStates in DELIVERING, skipping...", polarisConfig.getPodName());
-            return;
-        }
-
-        int batchSize = polarisConfig.getPollingBatchSize();
-        Pageable pageable = PageRequest.of(0, batchSize, Sort.by(Sort.Direction.ASC, "timestamp"));
-
-        Date upperThresholdTimestamp = Date.from(Instant.now().minus(polarisConfig.getDeliveringStatesOffsetMins(), ChronoUnit.MINUTES));
-        log.debug("DELIVERING timestamp upper threshold: {}", upperThresholdTimestamp);
-        log.debug("pageable: {}", pageable);
-        Slice<MessageStateMongoDocument> messageStatesSlices;
-
-        List<CompletableFuture<Void>> completableFutureList = new ArrayList<>();
-
-        do {
-            messageStatesSlices = messageStateMongoRepo.findByDeliveryTypeAndStatusAndModifiedLessThanEqual(DeliveryType.CALLBACK, Status.DELIVERING, upperThresholdTimestamp, pageable);
-            log.debug("messageStatesSlices: {} | {}", messageStatesSlices, messageStatesSlices.get().toList());
-
-            if(messageStatesSlices.getNumberOfElements() > 0) {
-                CompletableFuture<Void> republishTask = threadPoolService.startRepublishTask(messageStatesSlices);
-                if (republishTask != null) {
-                    completableFutureList.add(republishTask);
-                }
-            }
-            pageable = pageable.next();
-
-        } while(messageStatesSlices.hasNext());
-
-        // wait for tasks to complete to really finish the run
-        for(CompletableFuture<Void> completableFuture : completableFutureList) {
+        if (workerService.tryGlobalLock()) {
             try {
-                completableFuture.get();
-            } catch (InterruptedException | ExecutionException e) {
-                log.error("Unexpected error processing event task", e);
+                log.info("Start ScheduledEventDeliveringHandler");
+
+                int batchSize = polarisConfig.getPollingBatchSize();
+                Pageable pageable = PageRequest.of(0, batchSize, Sort.by(Sort.Direction.ASC, "timestamp"));
+
+                Date upperThresholdTimestamp = Date.from(Instant.now().minus(polarisConfig.getDeliveringStatesOffsetMins(), ChronoUnit.MINUTES));
+                log.debug("DELIVERING timestamp upper threshold: {}", upperThresholdTimestamp);
+                log.debug("pageable: {}", pageable);
+                Slice<MessageStateMongoDocument> messageStatesSlices;
+
+                List<CompletableFuture<Void>> completableFutureList = new ArrayList<>();
+
+                do {
+                    messageStatesSlices = messageStateMongoRepo.findByDeliveryTypeAndStatusAndModifiedLessThanEqual(DeliveryType.CALLBACK, Status.DELIVERING, upperThresholdTimestamp, pageable);
+                    log.debug("messageStatesSlices: {} | {}", messageStatesSlices, messageStatesSlices.get().toList());
+
+                    if(messageStatesSlices.getNumberOfElements() > 0) {
+                        CompletableFuture<Void> republishTask = threadPoolService.startRepublishTask(messageStatesSlices);
+                        if (republishTask != null) {
+                            completableFutureList.add(republishTask);
+                        }
+                    }
+                    pageable = pageable.next();
+
+                } while(messageStatesSlices.hasNext());
+
+                // wait for tasks to complete to really finish the run
+                for(CompletableFuture<Void> completableFuture : completableFutureList) {
+                    try {
+                        completableFuture.get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        log.error("Unexpected error processing event task", e);
+                    }
+                }
+
+                log.info("Finished ScheduledEventDeliveringHandler");
+            } finally {
+                workerService.globalUnlock();
             }
         }
-
-        log.info("Finished ScheduledEventDeliveringHandler");
     }
 }

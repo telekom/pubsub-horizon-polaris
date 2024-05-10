@@ -11,9 +11,7 @@ import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException
 import de.telekom.horizon.polaris.model.PartialSubscription;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
 import de.telekom.horizon.polaris.util.MockGenerator;
-import io.fabric8.kubernetes.api.model.Pod;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.SerializationUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,21 +37,14 @@ class ScheduledEventWaitingHandlerTest {
 
     ScheduledEventWaitingHandler scheduledEventWaitingHandler;
 
-    Pod fakePod;
     CircuitBreakerMessage fakeCircuitBreakerMessage;
     PartialSubscription fakePartialSubscription;
 
     @BeforeEach
-    void prepare() throws CouldNotDetermineWorkingSetException {
+    void prepare() {
         log.info("prepare");
 
         threadPoolService = MockGenerator.mockThreadPoolService();
-
-        fakePod = MockGenerator.createFakePod(POD_NAME);
-        MockGenerator.podResourceEventHandler.onAdd(fakePod);
-
-        doReturn(true).when(MockGenerator.polarisService).areResourcesFullySynced();
-        doReturn(true).when(MockGenerator.podService).shouldCallbackUrlBeHandledByThisPod(anyString());
 
         fakeCircuitBreakerMessage = new CircuitBreakerMessage(SUBSCRIPTION_ID, CircuitBreakerStatus.OPEN, CALLBACK_URL, ENV);
 
@@ -61,20 +52,12 @@ class ScheduledEventWaitingHandlerTest {
 
         circuitBreakerManager = spy(new CircuitBreakerManager(threadPoolService));
 
-
         when(MockGenerator.partialSubscriptionCache.get(eq(SUBSCRIPTION_ID))).thenReturn( Optional.ofNullable(fakePartialSubscription) );
 
-        when(MockGenerator.polarisConfig.getPodName()).thenReturn(POD_NAME);
+        scheduledEventWaitingHandler = new ScheduledEventWaitingHandler(circuitBreakerManager);
 
-
-        scheduledEventWaitingHandler = new ScheduledEventWaitingHandler(MockGenerator.polarisService, circuitBreakerManager);
-
-//        when(environment.getActiveProfiles()).thenReturn( );
-//        when(polarisPodCache.getAllPods()).thenReturn(Set.of("default"));
-
-//        doNothing().when(tokenCache).retrieveAllAccessTokens();
-//        restClient = Mockito.spy(new HealthCheckRestClient(tokenCache, httpClient, polarisConfig));
-//        restClient.triggerTokenRetrieval();
+        when(threadPoolService.getWorkerService().tryGlobalLock()).thenReturn(true);
+        when(threadPoolService.getWorkerService().tryClaim(any())).thenReturn(true);
     }
 
     @Test
@@ -82,12 +65,10 @@ class ScheduledEventWaitingHandlerTest {
     void shouldStartRepublishingAndSubscriptionComparisonTask() {
         var fakeCheckingCbMessage = SerializationUtils.clone(fakeCircuitBreakerMessage);
         fakeCheckingCbMessage.setStatus(CircuitBreakerStatus.CHECKING);
-        fakeCheckingCbMessage.setAssignedPodId(POD_NAME);
         when(MockGenerator.circuitBreakerCache.getCircuitBreakerMessages(eq(0), anyInt(), eq(CircuitBreakerStatus.CHECKING))).thenReturn( List.of(fakeCheckingCbMessage));
 
         var fakeRepublishingCbMessage = SerializationUtils.clone(fakeCircuitBreakerMessage);
         fakeRepublishingCbMessage.setStatus(CircuitBreakerStatus.REPUBLISHING);
-        fakeRepublishingCbMessage.setAssignedPodId(POD_NAME);
 
         when(MockGenerator.circuitBreakerCache.getCircuitBreakerMessages(eq(0), anyInt(), eq(CircuitBreakerStatus.REPUBLISHING))).thenReturn( List.of(fakeRepublishingCbMessage));
         when(MockGenerator.circuitBreakerCache.getCircuitBreakerMessages(eq(1), anyInt(), any(CircuitBreakerStatus.class))).thenReturn( List.of() );
@@ -96,7 +77,6 @@ class ScheduledEventWaitingHandlerTest {
         verify(MockGenerator.circuitBreakerCache, times(1)).getCircuitBreakerMessages(anyInt(), anyInt(), eq(CircuitBreakerStatus.CHECKING) );
         verify(MockGenerator.circuitBreakerCache, times(1)).getCircuitBreakerMessages(anyInt(), anyInt(), eq(CircuitBreakerStatus.REPUBLISHING) );
         
-        verify(MockGenerator.circuitBreakerCache, times(0)).updateCircuitBreakerMessage(argThat(cbm -> cbm.getAssignedPodId().equals(POD_NAME)));
 
         verify(threadPoolService, times(2)).startSubscriptionComparisonTask(notNull(), eq(fakePartialSubscription));
     }
@@ -111,7 +91,6 @@ class ScheduledEventWaitingHandlerTest {
         // Normally gets called every 30 secs
         scheduledEventWaitingHandler.loadAndProcessOpenCircuitBreakerMessagesScheduled();
         verify(MockGenerator.circuitBreakerCache, times(1)).getCircuitBreakerMessages(anyInt(), anyInt(), eq(CircuitBreakerStatus.OPEN) ); // 2 times, bc 2 pages
-        verify(MockGenerator.circuitBreakerCache, times(1)).updateCircuitBreakerMessage(argThat(cbm -> cbm.getAssignedPodId().equals(POD_NAME)));
 
         verify(threadPoolService, times(1)).startSubscriptionComparisonTask(notNull(), eq(fakePartialSubscription));
     }
@@ -131,7 +110,6 @@ class ScheduledEventWaitingHandlerTest {
 
         // never, bc broke out of function before
         verify(MockGenerator.circuitBreakerCache, never()).getCircuitBreakerMessage(eq(SUBSCRIPTION_ID));
-        verify(MockGenerator.circuitBreakerCache, never()).updateCircuitBreakerMessage(argThat(cbm -> cbm.getAssignedPodId().equals(POD_NAME)));
         verify(threadPoolService, never()).startSubscriptionComparisonTask(notNull(), eq(fakePartialSubscription));
     }
 
@@ -142,7 +120,7 @@ class ScheduledEventWaitingHandlerTest {
         when(MockGenerator.circuitBreakerCache.getCircuitBreakerMessages(eq(0), anyInt(), any(CircuitBreakerStatus.class))).thenReturn( List.of(fakeCircuitBreakerMessage));
         when(MockGenerator.circuitBreakerCache.getCircuitBreakerMessages(eq(1), anyInt(), any(CircuitBreakerStatus.class))).thenReturn( List.of() );
 
-        when(MockGenerator.podService.shouldCallbackUrlBeHandledByThisPod(anyString())).thenReturn(false);
+        when(threadPoolService.getWorkerService().tryClaim(any())).thenReturn(false);
 
         scheduledEventWaitingHandler.loadAndProcessOpenCircuitBreakerMessagesScheduled();
 
@@ -150,7 +128,6 @@ class ScheduledEventWaitingHandlerTest {
 
         // never, bc broke out of function before
         verify(MockGenerator.circuitBreakerCache, never()).getCircuitBreakerMessage(eq(SUBSCRIPTION_ID));
-        verify(MockGenerator.circuitBreakerCache, never()).updateCircuitBreakerMessage(argThat(cbm -> cbm.getAssignedPodId().equals(POD_NAME)));
         verify(threadPoolService, never()).startSubscriptionComparisonTask(notNull(), eq(fakePartialSubscription));
     }
 
@@ -162,14 +139,10 @@ class ScheduledEventWaitingHandlerTest {
 
         var fakeCircuitBreakerMessageClone = SerializationUtils.clone(fakeCircuitBreakerMessage);
         fakeCircuitBreakerMessageClone.setStatus(circuitBreakerStatus);
-        String uniqueNotOurPodName = String.format("not-our-pod-name-%s", RandomStringUtils.random(6, true, true));
-        fakeCircuitBreakerMessageClone.setAssignedPodId(uniqueNotOurPodName);
-
 
         when(MockGenerator.circuitBreakerCache.getCircuitBreakerMessages(eq(0), anyInt(), any(CircuitBreakerStatus.class))).thenReturn( List.of(fakeCircuitBreakerMessageClone));
         when(MockGenerator.circuitBreakerCache.getCircuitBreakerMessages(eq(1), anyInt(), any(CircuitBreakerStatus.class))).thenReturn( List.of() );
-
-        when(MockGenerator.podService.shouldCallbackUrlBeHandledByThisPod(anyString())).thenReturn(false);
+        when(threadPoolService.getWorkerService().tryClaim(any())).thenReturn(false);
 
         scheduledEventWaitingHandler.loadAndProcessOpenCircuitBreakerMessagesScheduled();
 
@@ -177,10 +150,7 @@ class ScheduledEventWaitingHandlerTest {
 
         // never, bc broke out of function before
         verify(MockGenerator.circuitBreakerCache, never()).getCircuitBreakerMessage(eq(SUBSCRIPTION_ID));
-        verify(MockGenerator.circuitBreakerCache, never()).updateCircuitBreakerMessage(argThat(cbm -> cbm.getAssignedPodId().equals(POD_NAME)));
         verify(threadPoolService, never()).startSubscriptionComparisonTask(notNull(), eq(fakePartialSubscription));
     }
-
-
 }
 

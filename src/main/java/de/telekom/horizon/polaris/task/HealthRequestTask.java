@@ -36,9 +36,7 @@ public class HealthRequestTask implements Callable<Boolean> {
     private final HealthCheckRestClient restClient;
     private final HealthCheckCache healthCheckCache;
     private final CircuitBreakerCacheService circuitBreakerCache;
-    private final ThreadPoolService threadPoolService;
     private final PolarisConfig polarisConfig;
-
 
     public HealthRequestTask(String callbackUrl, String publisherId, String subscriberId, String environment, HttpMethod httpMethod, ThreadPoolService threadPoolService) {
         this.callbackUrl = callbackUrl;
@@ -50,7 +48,6 @@ public class HealthRequestTask implements Callable<Boolean> {
         this.healthCheckCache = threadPoolService.getHealthCheckCache();
         this.circuitBreakerCache = threadPoolService.getCircuitBreakerCacheService();
         this.polarisConfig = threadPoolService.getPolarisConfig();
-        this.threadPoolService = threadPoolService;
     }
 
     /**
@@ -68,7 +65,6 @@ public class HealthRequestTask implements Callable<Boolean> {
         return Duration.ofMinutes((int) Math.min(Math.pow(2, republishCount), 60));
     }
 
-
     @Override
     public Boolean call() {
         boolean wasSuccessful = false;
@@ -82,8 +78,8 @@ public class HealthRequestTask implements Callable<Boolean> {
                 var returnStatusLine = oReturnStatusLine.get();
                 var statusCode = returnStatusLine.getStatusCode();
                 updateHealthCheckInCaches(statusCode, returnStatusLine.getReasonPhrase());
-
-                wasSuccessful = polarisConfig.getSuccessfulStatusCodes().contains(statusCode);
+                var successfulStatusCodes = polarisConfig.getSuccessfulStatusCodes();
+                wasSuccessful = successfulStatusCodes.contains(statusCode);
             }
         } catch (Exception exception) {
             log.error("Unexpected error while executing health check request or updating health check in caches.", exception);

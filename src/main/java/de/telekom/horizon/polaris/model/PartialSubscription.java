@@ -61,7 +61,7 @@ public record PartialSubscription(String environment, String subscriptionId, Str
         var subscription = subscriptionResource.getSpec().getSubscription();
         var isGetRequest = subscription.isEnforceGetHttpRequestMethodForHealthCheck();
         var isCircuitBreakerOptOut = subscription.isCircuitBreakerOptOut();
-        String environment = determineEnvironment(subscriptionResource);
+        String environment = subscriptionResource.getSpec().getEnvironment();
         String publisherId = subscription.getPublisherId();
         String subscriptionId = subscription.getSubscriptionId();
         String subscriberId = subscription.getSubscriberId();
@@ -70,13 +70,5 @@ public record PartialSubscription(String environment, String subscriptionId, Str
         DeliveryType deliveryType = DeliveryType.fromString(subscription.getDeliveryType());
 
         return new PartialSubscription(environment, subscriptionId, publisherId, subscriberId, callback, deliveryType, isGetRequest, isCircuitBreakerOptOut);
-    }
-
-    private static String determineEnvironment(SubscriptionResource resource) {
-        if (resource.getSpec().getEnvironment() == null || resource.getSpec().getEnvironment().equals("default")) {
-            return resource.getMetadata().getNamespace();
-        } else {
-            return resource.getSpec().getEnvironment();
-        }
     }
 }

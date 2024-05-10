@@ -9,7 +9,6 @@ import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerStatus;
 import de.telekom.horizon.polaris.cache.HealthCheckCache;
 import de.telekom.horizon.polaris.config.PolarisConfig;
 import de.telekom.horizon.polaris.model.CallbackKey;
-import de.telekom.horizon.polaris.model.HealthCheckData;
 import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 

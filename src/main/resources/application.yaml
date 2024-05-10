@@ -11,7 +11,7 @@ logging:
     root: ${LOG_LEVEL:INFO}
 
 polaris:
-  pod-name: ${POD_NAME:polaris-default}
+  default-environment: ${GALAXY_DEFAULT_ENVIRONMENT:default}
   oidc:
     token-uri: ${IRIS_TOKEN_ENDPOINT:https://iris.example.com/auth/realms/<realm>/protocol/openid-connect/token}
     client-id: ${IRIS_CLIENT_ID:gateway}
@@ -48,6 +48,9 @@ polaris:
 horizon:
   cache:
     enabled: true
+    kubernetesServiceDns: ${POLARIS_CACHE_SERVICE_DNS:horizon-quasar-discovery-headless.integration.svc.cluster.local}
+    attributes:
+      qualifier: polaris
   mongo:
     enabled: true
   kafka:
@@ -60,19 +63,6 @@ horizon:
     compression:
       enabled: ${POLARIS_KAFKA_COMPRESSION_ENABLED:false}
       type: ${POLARIS_KAFKA_COMPRESSION_TYPE:none}
-
-kubernetes:
-  enabled: true
-  #roverToken:
-  #kubeConfigPath:
-  informer:
-    pods:
-      namespace: ${POLARIS_PODS_INFORMER_NAMESPACE:integration}
-      appname: ${POLARIS_APP_NAME:horizon-polaris}
-    resyncperiod:
-      # 10 minutes
-      ms: 600000
-    namespace: ${POLARIS_INFORMER_NAMESPACE:integration}
 
 management:
   endpoints:

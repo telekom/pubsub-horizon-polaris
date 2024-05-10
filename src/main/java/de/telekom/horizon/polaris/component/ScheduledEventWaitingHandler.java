@@ -5,13 +5,11 @@
 package de.telekom.horizon.polaris.component;
 
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerStatus;
-import de.telekom.horizon.polaris.service.PolarisService;
+import de.telekom.horizon.polaris.config.PolarisConfig;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import de.telekom.horizon.polaris.config.PolarisConfig;
-
-import jakarta.annotation.PostConstruct;
 
 /**
  * Scheduled task responsible for handling events in the WAITING state and therefore having an open circuit breaker.
@@ -29,11 +27,9 @@ import jakarta.annotation.PostConstruct;
 @Slf4j
 @Component
 public class ScheduledEventWaitingHandler {
-    private final PolarisService polarisService;
     private final CircuitBreakerManager circuitBreakerManager;
 
-    public ScheduledEventWaitingHandler(PolarisService polarisService, CircuitBreakerManager circuitBreakerManager) {
-        this.polarisService = polarisService;
+    public ScheduledEventWaitingHandler(CircuitBreakerManager circuitBreakerManager) {
         this.circuitBreakerManager = circuitBreakerManager;
     }
 
@@ -47,16 +43,8 @@ public class ScheduledEventWaitingHandler {
      */
     @PostConstruct
     public void continueWorkingOnAssignedMessages() {
-        boolean isFullySynced = polarisService.areResourcesFullySynced();
-        if(isFullySynced) {
-            circuitBreakerManager.loadAndProcessCircuitBreakerMessages(CircuitBreakerStatus.REPUBLISHING);
-            circuitBreakerManager.loadAndProcessCircuitBreakerMessages(CircuitBreakerStatus.CHECKING);
-        } else {
-            polarisService.setFullySyncedCallback( () -> {
-                circuitBreakerManager.loadAndProcessCircuitBreakerMessages(CircuitBreakerStatus.REPUBLISHING);
-                circuitBreakerManager.loadAndProcessCircuitBreakerMessages(CircuitBreakerStatus.CHECKING);
-            } );
-        }
+        circuitBreakerManager.loadAndProcessCircuitBreakerMessages(CircuitBreakerStatus.REPUBLISHING);
+        circuitBreakerManager.loadAndProcessCircuitBreakerMessages(CircuitBreakerStatus.CHECKING);
     }
 
     /**
@@ -69,16 +57,7 @@ public class ScheduledEventWaitingHandler {
     @Scheduled(fixedDelayString = "${polaris.polling.interval-ms}", initialDelayString = "${random.int(${polaris.polling.interval-ms})}")
     protected void loadAndProcessOpenCircuitBreakerMessagesScheduled() {
         log.info("Start ScheduledEventWaitingHandler");
-        boolean isFullySynced = polarisService.areResourcesFullySynced();
-        if(!isFullySynced) {
-            log.info("Resources are not fully synced yet. Waiting for next run...");
-            return;
-        }
         circuitBreakerManager.loadAndProcessCircuitBreakerMessages(CircuitBreakerStatus.OPEN);
         log.info("Finished ScheduledEventWaitingHandler");
     }
-
-
-
-
 }

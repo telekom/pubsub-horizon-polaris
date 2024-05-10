@@ -33,12 +33,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 @ToString
 @Getter
 public class HealthCheckData {
-    @Getter
     private final Set<String> subscriptionIds;
     @Setter
     private CircuitBreakerHealthCheck lastHealthCheckOrNull;
     private final AtomicBoolean isThreadOpen;
     private final AtomicInteger republishCount;
+
+    @Setter
+    private String key;
 
     public HealthCheckData() {
         subscriptionIds = ConcurrentHashMap.newKeySet();

@@ -6,10 +6,8 @@ package de.telekom.horizon.polaris.util;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import de.telekom.eni.pandora.horizon.cache.service.JsonCacheService;
 import de.telekom.eni.pandora.horizon.kafka.event.EventWriter;
-import de.telekom.eni.pandora.horizon.kubernetes.InformerStoreInitHandler;
-import de.telekom.eni.pandora.horizon.kubernetes.PodResourceListener;
-import de.telekom.eni.pandora.horizon.kubernetes.SubscriptionResourceListener;
 import de.telekom.eni.pandora.horizon.kubernetes.resource.SubscriptionResource;
 import de.telekom.eni.pandora.horizon.model.event.Status;
 import de.telekom.eni.pandora.horizon.model.event.SubscriptionEventMessage;
@@ -20,10 +18,10 @@ import de.telekom.eni.pandora.horizon.mongo.model.MessageStateMongoDocument;
 import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
 import de.telekom.horizon.polaris.cache.HealthCheckCache;
 import de.telekom.horizon.polaris.cache.PartialSubscriptionCache;
-import de.telekom.horizon.polaris.cache.PolarisPodCache;
 import de.telekom.horizon.polaris.config.PolarisConfig;
 import de.telekom.horizon.polaris.model.PartialSubscription;
 import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
+import de.telekom.horizon.polaris.service.WorkerService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -54,11 +52,16 @@ import java.util.concurrent.TimeUnit;
 
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static de.telekom.horizon.polaris.util.WiremockStubs.stubOidc;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest()
 @Import(MongoTestServerConfiguration.class)
 @Slf4j
 public abstract class AbstractIntegrationTest {
+
+    @MockBean
+    private WorkerService workerService;
 
     static {
         EmbeddedKafkaHolder.getEmbeddedKafka();
@@ -89,20 +92,13 @@ public abstract class AbstractIntegrationTest {
     protected PolarisConfig polarisConfig;
 
     @Autowired
-    protected PolarisPodCache polarisPodCache;
-
-    @MockBean
-    private SubscriptionResourceListener subscriptionResourceListener;
-    @MockBean
-    protected PodResourceListener podResourceListener;
-    @MockBean
-    private InformerStoreInitHandler informerStoreInitHandler;
-
-    @Autowired
     protected HealthCheckCache healthCheckCache;
 
     @Autowired
     private ConsumerFactory consumerFactory;
+
+    @MockBean
+    protected JsonCacheService<SubscriptionResource> jsonCacheService;
 
     private static final Map<String, BlockingQueue<ConsumerRecord<String, String>>> multiplexedRecordsMap = new HashMap<>();
 
@@ -112,13 +108,12 @@ public abstract class AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        when(workerService.tryGlobalLock()).thenReturn(true);
+        when(workerService.tryClaim(any())).thenReturn(true);
+
         eventType = "junit.test.event." + DigestUtils.sha1Hex(String.valueOf(System.currentTimeMillis()));
 
         multiplexedRecordsMap.putIfAbsent(getEventType(), new LinkedBlockingQueue<>());
-
-        var pods = polarisPodCache.getAllPods();
-        pods.forEach(polarisPodCache::remove);
-        polarisPodCache.add( polarisConfig.getPodName() );
 
         var topicNames = Arrays.stream(EventRetentionTime.values()).map(EventRetentionTime::getTopic).toArray(String[]::new);
         var containerProperties = new ContainerProperties(topicNames);
@@ -149,16 +144,15 @@ public abstract class AbstractIntegrationTest {
     }
 
     public void simulateOpenCircuitBreaker(PartialSubscription partialSubscription, String eventMessageUuid, int partition, long offset) {
-        simulateCircuitBreaker(partialSubscription, eventMessageUuid, partition, offset, "", CircuitBreakerStatus.OPEN);
+        simulateCircuitBreaker(partialSubscription, eventMessageUuid, partition, offset, CircuitBreakerStatus.OPEN);
     }
 
     public void simulateRepublishingCircuitBreaker(PartialSubscription partialSubscription, String eventMessageUuid, int partition, long offset) {
-        simulateCircuitBreaker(partialSubscription, eventMessageUuid, partition, offset, "", CircuitBreakerStatus.REPUBLISHING);
+        simulateCircuitBreaker(partialSubscription, eventMessageUuid, partition, offset, CircuitBreakerStatus.REPUBLISHING);
     }
 
-    public void simulateCircuitBreaker(PartialSubscription partialSubscription, String eventMessageUuid, int partition, long offset, String assignedPod, CircuitBreakerStatus status) {
+    public void simulateCircuitBreaker(PartialSubscription partialSubscription, String eventMessageUuid, int partition, long offset, CircuitBreakerStatus status) {
         CircuitBreakerMessage circuitBreakerMessage = new CircuitBreakerMessage(partialSubscription.subscriptionId(), status, partialSubscription.callbackUrl(),  partialSubscription.environment());
-        circuitBreakerMessage.setAssignedPodId(assignedPod);
         circuitBreakerCacheService.updateCircuitBreakerMessage(circuitBreakerMessage);
 
         MessageStateMongoDocument testMessageStateMongoDocumentWaiting = MockGenerator.createFakeMessageStateMongoDocuments(1, partialSubscription.environment(), Status.WAITING, false).get(0);
@@ -166,12 +160,6 @@ public abstract class AbstractIntegrationTest {
         testMessageStateMongoDocumentWaiting.setCoordinates(partition, offset);
         testMessageStateMongoDocumentWaiting.setSubscriptionId(partialSubscription.subscriptionId());
         messageStateMongoRepo.save(testMessageStateMongoDocumentWaiting);
-    }
-
-    public PartialSubscription addTestSubscription(SubscriptionResource subscriptionResource) {
-        var pa =  PartialSubscription.fromSubscriptionResource(subscriptionResource);
-        partialSubscriptionCache.add(pa);
-        return pa;
     }
 
     public ConsumerRecord<String, String> pollForRecord(int timeout, TimeUnit timeUnit) throws InterruptedException {

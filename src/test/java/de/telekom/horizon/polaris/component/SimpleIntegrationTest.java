@@ -7,7 +7,7 @@ package de.telekom.horizon.polaris.component;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.matching.UrlPattern;
-import com.mongodb.assertions.Assertions;
+import de.telekom.eni.pandora.horizon.exception.JsonCacheException;
 import de.telekom.eni.pandora.horizon.kubernetes.resource.SubscriptionResource;
 import de.telekom.eni.pandora.horizon.model.event.Status;
 import de.telekom.eni.pandora.horizon.model.event.SubscriptionEventMessage;
@@ -27,10 +27,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
@@ -38,46 +37,37 @@ import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static de.telekom.horizon.polaris.TestConstants.CALLBACK_URL;
 import static de.telekom.horizon.polaris.TestConstants.SUBSCRIPTION_ID;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.timeout;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.when;
 
 @Slf4j
 @AutoConfigureMockMvc(addFilters = false)
 class SimpleIntegrationTest extends AbstractIntegrationTest {
-    private final static String TRACING_HEADER_NAME = "x-b3-traceid";
 
     @Autowired
     private ObjectMapper objectMapper;
-
     @Autowired
     private ScheduledEventWaitingHandler scheduledEventWaitingHandler;
-
     @Autowired
     private CircuitBreakerManager circuitBreakerManager;
     @Autowired
     private HealthCheckCache healthCheckCache;
-
+    @Autowired
+    private ThreadPoolService threadPoolService;
     @SpyBean
     private CircuitBreakerCacheService circuitBreakerCacheService;
-    @SpyBean
-    private ThreadPoolService threadPoolService;
     private SubscriptionEventMessage subscriptionMessage_WAITING;
     private PartialSubscription partialSubscription;
 
-
     @BeforeEach
-    void beforeEach() throws ExecutionException, JsonProcessingException, InterruptedException {
+    void beforeEach() throws JsonCacheException {
         wireMockServer.stubFor(
                 head(new UrlPattern(equalTo(CALLBACK_URL), false)).willReturn(aResponse().withStatus(HttpStatus.OK.value()))
         );
 
         partialSubscription = addFakePartialSubscription(SUBSCRIPTION_ID, CALLBACK_URL);
         subscriptionMessage_WAITING = generateFakeSubscriptionEventMessage(SUBSCRIPTION_ID, CALLBACK_URL);
-
     }
 
     @Test
@@ -101,8 +91,6 @@ class SimpleIntegrationTest extends AbstractIntegrationTest {
                         urlPathEqualTo(CALLBACK_URL)
                 )
         );
-
-
 
         var recordIn_WAITING = pollForRecord(3, TimeUnit.SECONDS);  // The event we send in, this was getting picked
         var recordOut_PROCESSED = pollForRecord(5, TimeUnit.SECONDS); // The event the polaris republished
@@ -152,37 +140,14 @@ class SimpleIntegrationTest extends AbstractIntegrationTest {
         assertEquals(recordIn_WAITING.key(), subscriptionMessage_PROCESSED.getUuid());
     }
 
-    @Test
-    void simpleTestRebalanceFromRemovedPod() throws InterruptedException, JsonProcessingException, ExecutionException {
-        wireMockServer.resetAll();
-        wireMockServer.stubFor(
-                head(new UrlPattern(equalTo(CALLBACK_URL), false)).willReturn(aResponse().withStatus(HttpStatus.FORBIDDEN.value()))
-        );
-
-        final String anotherPodName = "SomePodName";
-        polarisPodCache.add(anotherPodName);
-
-        var sendResult = simulateNewPublishedEvent(subscriptionMessage_WAITING);
-        simulateCircuitBreaker(partialSubscription, subscriptionMessage_WAITING.getUuid(), sendResult.getRecordMetadata().partition(), sendResult.getRecordMetadata().offset(), anotherPodName, CircuitBreakerStatus.OPEN);
-
-        // Same 2 liner is used in the PdoResourceEventHandle#onDelete
-        polarisPodCache.remove(anotherPodName);
-        circuitBreakerManager.rebalanceFromRemovedPod(anotherPodName);
-
-        // All circuit breaker messages should be assigned to this pod
-        var cbs = circuitBreakerCacheService.getCircuitBreakerMessages(0, 10000, polarisConfig.getPodName());
-        assertEquals( 1, cbs.size());
-
-        Mockito.verify(threadPoolService, timeout(10000).times(1)).startHealthRequestTask( eq(wireMockServer.baseUrl() + CALLBACK_URL), anyString(), anyString(), anyString(), eq(HttpMethod.HEAD), any());
-        Mockito.verify(circuitBreakerCacheService, timeout(10000).times(1)).updateCircuitBreakerMessage(argThat(a -> Objects.equals(a.getSubscriptionId(), SUBSCRIPTION_ID) && a.getLastHealthCheck() != null));
-        wireMockServer.verify(1, headRequestedFor(urlPathEqualTo(CALLBACK_URL)));
-    }
-
-    private PartialSubscription addFakePartialSubscription(String subscriptionId, String callbackUrl) {
+    private PartialSubscription addFakePartialSubscription(String subscriptionId, String callbackUrl) throws JsonCacheException {
         SubscriptionResource subscriptionResource = MockGenerator.createFakeSubscriptionResource("playground", getEventType());
         subscriptionResource.getSpec().getSubscription().setSubscriptionId(subscriptionId);
         subscriptionResource.getSpec().getSubscription().setCallback(wireMockServer.baseUrl() + callbackUrl);
-        return addTestSubscription(subscriptionResource);
+
+        when(jsonCacheService.getByKey(eq(subscriptionId))).thenReturn(Optional.of(subscriptionResource));
+
+        return PartialSubscription.fromSubscriptionResource(subscriptionResource);
     }
 
     private SubscriptionEventMessage generateFakeSubscriptionEventMessage(String subscriptionId, String callbackUrl) {
@@ -192,5 +157,4 @@ class SimpleIntegrationTest extends AbstractIntegrationTest {
 
         return subscriptionMessage_WAITING;
     }
-
 }

@@ -35,7 +35,7 @@ Horizon Polaris serves as the circuit breaker within the [Horizon ecosystem](htt
 For the optimal setup, ensure you have:
 
 - A running instance of Kafka
-- Access to a Kubernetes cluster on which the `Subscription` (subscriber.horizon.telekom.de) custom resource definition has been registered
+- A running instance of MongoDB
 
 ## Building Polaris
 
@@ -68,7 +68,7 @@ Polaris configuration is managed through environment variables. Check the [compl
 
 ## Running Polaris
 ### Locally
-Before you can run Polaris locally you must have a running instance of Kafka  locally or forwarded from a remote cluster.
+Before you can run Polaris locally you must have a running instance of Kafka and MongoDB locally or forwarded from a remote cluster.
 Additionally, you need to have a Kubernetes config at `${user.home}/.kube/config.main` that points to the cluster you want to use.
 
 After that you can run Polaris in a dev mode using this command:
@@ -79,7 +79,7 @@ After that you can run Polaris in a dev mode using this command:
 To start a kafka instance locally you can run the Docker compose file living in the root of this repository:
 
 ```bash
-docker-compuse up -d
+docker-compose up -d
 ```
 
 ## Operational Information

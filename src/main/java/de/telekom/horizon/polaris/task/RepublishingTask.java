@@ -22,7 +22,6 @@ import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.kafka.core.KafkaTemplate;
 
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 

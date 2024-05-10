@@ -4,6 +4,7 @@
 
 package de.telekom.horizon.polaris.component;
 
+import com.hazelcast.cluster.MembershipEvent;
 import de.telekom.eni.pandora.horizon.model.event.DeliveryType;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerMessage;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerStatus;
@@ -12,15 +13,14 @@ import de.telekom.horizon.polaris.config.PolarisConfig;
 import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException;
 import de.telekom.horizon.polaris.model.PartialSubscription;
 import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
-import de.telekom.horizon.polaris.service.PodService;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
-import de.telekom.horizon.polaris.task.RepublishingTask;
+import de.telekom.horizon.polaris.service.WorkerService;
 import de.telekom.horizon.polaris.task.SubscriptionComparisonTask;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Manages circuit breakers, handling their states and assignment to the current pod.
@@ -30,50 +30,17 @@ import java.util.Objects;
 public class CircuitBreakerManager {
     private final ThreadPoolService threadPoolService;
     private final CircuitBreakerCacheService circuitBreakerCacheService;
-    private final PodService podService;
     private final PolarisConfig polarisConfig;
     private final PartialSubscriptionCache partialSubscriptionCache;
-
+    private final WorkerService workerService;
 
     public CircuitBreakerManager(ThreadPoolService threadPoolService) {
         this.threadPoolService = threadPoolService;
         this.circuitBreakerCacheService = threadPoolService.getCircuitBreakerCacheService();
-        this.podService = threadPoolService.getPodService();
         this.partialSubscriptionCache = threadPoolService.getPartialSubscriptionCache();
         this.polarisConfig = threadPoolService.getPolarisConfig();
+        this.workerService = threadPoolService.getWorkerService();
     }
-
-
-    /**
-     * Rebalances circuit breakers when a pod is removed. Does that by trying to reclaim all circuit breaker messages for itself.
-     * But only gets the ones assigned with its callback url hash and where the removed pod was assigned.
-     *
-     * @param removedPod The pod that was removed.
-     */
-    public void rebalanceFromRemovedPod(String removedPod) {
-        log.info("Start rebalanceFromRemovedPod for removed pod: {}", removedPod);
-        int page = 0;
-        int sumOfClaimedCircuitBreakerMessages = 0;
-        List<CircuitBreakerMessage> openCBs;
-        try {
-            do {
-                openCBs = circuitBreakerCacheService.getCircuitBreakerMessages(page++, polarisConfig.getPollingBatchSize());
-
-                int nrOfClaimedMessages = claimCircuitBreakerMessagesIfPossible(openCBs);
-                sumOfClaimedCircuitBreakerMessages += nrOfClaimedMessages;
-                // if a message was claimed we stay on the same page, because the result of the query is now different for the same page
-                // if we claim 10 messages on page 1 and the next 10 messages to claim will move to page 1, but we would go page 2
-                // missing the 10 messages. Thats why we stay on page 1 as long as we claim messages
-                if (nrOfClaimedMessages > 0) {
-                    page--;
-                }
-            } while (openCBs.size() >= polarisConfig.getPollingBatchSize());
-        } catch (CouldNotDetermineWorkingSetException e) {
-            log.error(e.getMessage(), e);
-        }
-        log.info("Finished rebalanceFromRemovedPod for removed pod: {}, claimed {} circuit breaker messages", removedPod, sumOfClaimedCircuitBreakerMessages);
-    }
-
 
     /**
      * Loads and processes circuit breaker messages based on their status.
@@ -85,24 +52,21 @@ public class CircuitBreakerManager {
         log.info("Start loadAndProcessCircuitBreakerMessages for circuit breaker status: {}", status);
         int sumOfClaimedCircuitBreakerMessages = 0;
         int page = 0;
-        try {
-            List<CircuitBreakerMessage> openCBs;
-            do {
-                openCBs = circuitBreakerCacheService.getCircuitBreakerMessages(page++, polarisConfig.getPollingBatchSize(), status);
-                log.info("{} circuit breakers: {}", status, openCBs);
 
-                int nrOfClaimedMessages = claimCircuitBreakerMessagesIfPossible(openCBs);
-                sumOfClaimedCircuitBreakerMessages += nrOfClaimedMessages;
+        List<CircuitBreakerMessage> openCBs;
+        do {
+            openCBs = circuitBreakerCacheService.getCircuitBreakerMessages(page++, polarisConfig.getPollingBatchSize(), status);
+            log.info("{} circuit breakers: {}", status, openCBs);
 
-                // see rebalanceFromRemovedPod
-                if (nrOfClaimedMessages > 0) {
-                    page--;
-                }
+            int nrOfClaimedMessages = claimCircuitBreakerMessagesIfPossible(openCBs);
+            sumOfClaimedCircuitBreakerMessages += nrOfClaimedMessages;
+
+            if (nrOfClaimedMessages > 0) {
+                page--;
             }
-            while (openCBs.size() >= polarisConfig.getPollingBatchSize());
-        } catch (CouldNotDetermineWorkingSetException e) {
-            log.error(e.getMessage(), e);
         }
+        while (openCBs.size() >= polarisConfig.getPollingBatchSize());
+
         log.info("Finished loadAndProcessCircuitBreakerMessages for circuit breaker status: {}, claimed {} circuit breaker messages", status, sumOfClaimedCircuitBreakerMessages);
     }
 
@@ -113,7 +77,7 @@ public class CircuitBreakerManager {
      * @return The number of claimed circuit breaker messages.
      * @throws CouldNotDetermineWorkingSetException If working set determination fails.
      */
-    private int claimCircuitBreakerMessagesIfPossible(List<CircuitBreakerMessage> circuitBreakerMessages) throws CouldNotDetermineWorkingSetException {
+    private int claimCircuitBreakerMessagesIfPossible(List<CircuitBreakerMessage> circuitBreakerMessages) {
         int nrOfClaimedCircuitBreakerMessages = 0;
         for (var circuitBreakerMessage : circuitBreakerMessages) {
             boolean wasClaimed = claimCircuitBreakerMessageIfPossible(circuitBreakerMessage);
@@ -130,46 +94,61 @@ public class CircuitBreakerManager {
      *
      * @param circuitBreakerMessage The circuit breaker message to process.
      * @return True if the circuit breaker message was claimed, false otherwise.
-     * @throws CouldNotDetermineWorkingSetException If working set determination fails.
      */
-    public boolean claimCircuitBreakerMessageIfPossible(CircuitBreakerMessage circuitBreakerMessage) throws CouldNotDetermineWorkingSetException {
+    public boolean claimCircuitBreakerMessageIfPossible(CircuitBreakerMessage circuitBreakerMessage) {
         CircuitBreakerStatus status = circuitBreakerMessage.getStatus();
         String subscriptionId = circuitBreakerMessage.getSubscriptionId();
-        boolean wasCircuitBreakerMessageChanged = false;
 
-        if (!podService.shouldCircuitBreakerMessageBeHandledByThisPod(circuitBreakerMessage)) {
-            log.info("Claiming circuit breaker message for subscriptionId {} was not possible, because this pod should not handle this callbackUrl or it is already assigned to another pod.", subscriptionId);
-            return false;
+        boolean hasBeenClaimed = false;
+
+        if (workerService.tryGlobalLock()) {
+            try {
+                if (workerService.tryClaim(subscriptionId)) {
+                    var oPartialSubscription = partialSubscriptionCache.get(subscriptionId);
+                    if (oPartialSubscription.isEmpty()) {
+                        log.warn("Could not find PartialSubscription with id {} for claiming circuit breaker message, closing", subscriptionId);
+                        circuitBreakerCacheService.closeCircuitBreaker(subscriptionId);
+                        return false;
+                    }
+
+                    if (CircuitBreakerStatus.OPEN.equals(status)) {
+                        circuitBreakerMessage.setStatus(CircuitBreakerStatus.CHECKING);
+                        circuitBreakerCacheService.updateCircuitBreakerMessage(circuitBreakerMessage);
+                        hasBeenClaimed = true;
+                    }
+
+                    PartialSubscription partialSubscription = oPartialSubscription.get();
+                    PartialSubscription oldPartialSubscription = new PartialSubscription(circuitBreakerMessage.getEnvironment(), subscriptionId, partialSubscription.publisherId(), circuitBreakerMessage.getSubscriberId(), circuitBreakerMessage.getCallbackUrl(), DeliveryType.CALLBACK, partialSubscription.isGetMethodInsteadOfHead(), partialSubscription.isCircuitBreakerOptOut());
+
+                    threadPoolService.startSubscriptionComparisonTask(oldPartialSubscription, partialSubscription);
+                } else {
+                    log.info("Claiming circuit breaker message for subscriptionId {} was not possible, because this pod should not handle this callbackUrl or it is already assigned to another pod.", subscriptionId);
+                }
+            } finally {
+                workerService.globalUnlock();
+            }
         }
 
-        var oPartialSubscription = partialSubscriptionCache.get(subscriptionId);
-        if (oPartialSubscription.isEmpty()) {
-            log.warn("Could not find PartialSubscription with id {} for claiming circuit breaker message, closing", subscriptionId);
-            circuitBreakerCacheService.closeCircuitBreaker(subscriptionId);
-            return false;
+        return hasBeenClaimed;
+    }
+
+    @EventListener
+    public void reclaimCircuitBreaker(MembershipEvent membershipEvent) {
+        if (membershipEvent.getEventType() == MembershipEvent.MEMBER_REMOVED) {
+            int page = 0;
+
+            List<CircuitBreakerMessage> openCBs;
+            do {
+                openCBs = circuitBreakerCacheService.getCircuitBreakerMessages(page++, polarisConfig.getPollingBatchSize());
+
+                int nrOfClaimedMessages = claimCircuitBreakerMessagesIfPossible(openCBs);
+                // if a message was claimed we stay on the same page, because the result of the query is now different for the same page
+                // if we claim 10 messages on page 1 and the next 10 messages to claim will move to page 1, but we would go page 2
+                // missing the 10 messages. Thats why we stay on page 1 as long as we claim messages
+                if (nrOfClaimedMessages > 0) {
+                    page--;
+                }
+            } while (openCBs.size() >= polarisConfig.getPollingBatchSize());
         }
-
-        String oldAssignedPodId = circuitBreakerMessage.getAssignedPodId();
-        boolean willAssignmentChange = !Objects.equals(oldAssignedPodId, polarisConfig.getPodName());
-        if (willAssignmentChange) {
-            circuitBreakerMessage.setAssignedPodId(polarisConfig.getPodName());
-            wasCircuitBreakerMessageChanged = true;
-        }
-
-        if (CircuitBreakerStatus.OPEN.equals(status)) {
-            circuitBreakerMessage.setStatus(CircuitBreakerStatus.CHECKING);
-            wasCircuitBreakerMessageChanged = true;
-        }
-
-        if (wasCircuitBreakerMessageChanged) {
-            circuitBreakerCacheService.updateCircuitBreakerMessage(circuitBreakerMessage);
-        }
-
-        PartialSubscription partialSubscription = oPartialSubscription.get();
-        PartialSubscription oldPartialSubscription = new PartialSubscription(circuitBreakerMessage.getEnvironment(), subscriptionId, partialSubscription.publisherId(), circuitBreakerMessage.getSubscriberId(), circuitBreakerMessage.getCallbackUrl(), DeliveryType.CALLBACK, partialSubscription.isGetMethodInsteadOfHead(), partialSubscription.isCircuitBreakerOptOut());
-
-        threadPoolService.startSubscriptionComparisonTask(oldPartialSubscription, partialSubscription);
-
-        return wasCircuitBreakerMessageChanged;
     }
 }

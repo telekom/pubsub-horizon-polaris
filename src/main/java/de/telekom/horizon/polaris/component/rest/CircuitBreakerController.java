@@ -66,16 +66,6 @@ public class CircuitBreakerController {
         return circuitBreakerCacheService.getCircuitBreakerMessages(page, size, status);
     }
 
-    @GetMapping(params = {"page", "size", "assignedPod"}, produces = "application/json")
-    public List<CircuitBreakerMessage> getCircuitBreakerMessages(@RequestParam() int page, @RequestParam() int size, @RequestParam() String assignedPod) {
-        return circuitBreakerCacheService.getCircuitBreakerMessages(page, size, assignedPod);
-    }
-
-    @GetMapping(params = {"page", "size", "status", "assignedPod"}, produces = "application/json")
-    public List<CircuitBreakerMessage> getCircuitBreakerMessages(@RequestParam() int page, @RequestParam() int size, @RequestParam() CircuitBreakerStatus status, @RequestParam() String assignedPod) {
-        return circuitBreakerCacheService.getCircuitBreakerMessages(page, size, status, assignedPod);
-    }
-
     /**
      * Closes Circuit Breakers based on the provided request.
      * <p>
