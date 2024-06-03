@@ -47,7 +47,11 @@ public class WorkerService implements MembershipListener {
     }
 
     public void removeMemberClaims(Member member) {
-        claims.entrySet().removeIf(entry -> entry.getValue().equals(member.getUuid().toString()));
+        claims.forEach((key, value) -> {
+            if (value.equals(member.getUuid().toString())) {
+                claims.remove(key);
+            }
+        });
     }
 
     public boolean tryGlobalLock() {
@@ -72,6 +76,10 @@ public class WorkerService implements MembershipListener {
     @Scheduled(fixedDelayString = "${polaris.polling.interval-ms}", initialDelayString = "${random.int(${polaris.polling.interval-ms})}")
     public void releaseDeadClaims() {
         var memberList = hazelcastInstance.getCluster().getMembers().stream().map(Member::getUuid).map(UUID::toString).toList();
-        claims.entrySet().removeIf(entry -> !memberList.contains(entry.getValue()));
+        claims.forEach((key, value) -> {
+            if (!memberList.contains(value)) {
+                claims.remove(key);
+            }
+        });
     }
 }
