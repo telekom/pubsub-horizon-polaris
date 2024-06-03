@@ -14,6 +14,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -47,11 +50,16 @@ public class WorkerService implements MembershipListener {
     }
 
     public void removeMemberClaims(Member member) {
-        claims.forEach((key, value) -> {
-            if (value.equals(member.getUuid().toString())) {
-                claims.remove(key);
+        List<String> keysToRemove = new ArrayList<>();
+        for (Map.Entry<String, String> entry : claims.entrySet()) {
+            if (entry.getValue().equals(member.getUuid().toString())) {
+                keysToRemove.add(entry.getKey());
             }
-        });
+        }
+
+        for (String key : keysToRemove) {
+            claims.remove(key);
+        }
     }
 
     public boolean tryGlobalLock() {
@@ -73,13 +81,19 @@ public class WorkerService implements MembershipListener {
         applicationEventPublisher.publishEvent(membershipEvent);
     }
 
-    @Scheduled(fixedDelayString = "${polaris.polling.interval-ms}", initialDelayString = "${random.int(${polaris.polling.interval-ms})}")
+    @Scheduled(fixedDelayString = "${polaris.polling.interval-ms}")
     public void releaseDeadClaims() {
         var memberList = hazelcastInstance.getCluster().getMembers().stream().map(Member::getUuid).map(UUID::toString).toList();
-        claims.forEach((key, value) -> {
-            if (!memberList.contains(value)) {
-                claims.remove(key);
+
+        List<String> keysToRemove = new ArrayList<>();
+        for (Map.Entry<String, String> entry : claims.entrySet()) {
+            if (!memberList.contains(entry.getValue())) {
+                keysToRemove.add(entry.getKey());
             }
-        });
+        }
+
+        for (String key : keysToRemove) {
+            claims.remove(key);
+        }
     }
 }

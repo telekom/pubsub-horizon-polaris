@@ -57,11 +57,6 @@ public class WorkerServiceTest {
         when(hazelcastInstance.getCPSubsystem()).thenReturn(cpSubsystem);
 
         workerServiceSpy = Mockito.spy(new WorkerService(hazelcastInstance, applicationEventPublisher));
-
-
-        //this.hazelcastInstance.getCluster().addMembershipListener(this);
-        //this.globalLock = hazelcastInstance.getCPSubsystem().getLock("polaris-lock");
-        //this.claims = hazelcastInstance.getMap("polaris-member-claims");
     }
 
 
@@ -113,20 +108,26 @@ public class WorkerServiceTest {
 
     @Test
     void testRemoveMemberClaims() {
+        var subscriptionId1 = "foo";
+        var subscriptionId2 = "bar";
+        var subscriptionId3 = "xyz";
+
         var realMap = new ConcurrentHashMap<String, String>();
-        realMap.put("foo", TEST_UUID);
-        realMap.put("bar", TEST_UUID);
+        realMap.put(subscriptionId1, TEST_UUID);
+        realMap.put(subscriptionId2, TEST_UUID);
+        realMap.put(subscriptionId3, "123");
 
         var member = Mockito.mock(Member.class);
         when(member.getUuid()).thenReturn(UUID.fromString(TEST_UUID));
 
         when(claims.entrySet()).thenReturn(realMap.entrySet());
 
-        assertThat(realMap.size()).isEqualTo(2);
-
         workerServiceSpy.removeMemberClaims(member);
 
-        assertThat(realMap.isEmpty()).isTrue();
+        verify(claims, times(2)).remove(any());
+        verify(claims, times(1)).remove(subscriptionId1);
+        verify(claims, times(1)).remove(subscriptionId2);
+        verify(claims, never()).remove(subscriptionId3);
     }
 
     @Test
