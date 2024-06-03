@@ -11,8 +11,10 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.cp.lock.FencedLock;
 import com.hazelcast.map.IMap;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -65,5 +67,11 @@ public class WorkerService implements MembershipListener {
     public void memberRemoved(MembershipEvent membershipEvent) {
         removeMemberClaims(membershipEvent.getMember());
         applicationEventPublisher.publishEvent(membershipEvent);
+    }
+
+    @Scheduled(fixedDelayString = "${polaris.polling.interval-ms}", initialDelayString = "${random.int(${polaris.polling.interval-ms})}")
+    public void releaseDeadClaims() {
+        var memberList = hazelcastInstance.getCluster().getMembers().stream().map(Member::getUuid).map(UUID::toString).toList();
+        claims.entrySet().removeIf(entry -> !memberList.contains(entry.getValue()));
     }
 }
