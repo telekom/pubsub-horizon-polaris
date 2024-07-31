@@ -32,6 +32,5 @@ SPDX-License-Identifier: Apache-2.0
 | POLARIS_KAFKA_GROUPID                       | plunger                   | Kafka consumer group ID used by Polaris.                                                                                   |
 | POLARIS_KAFKA_COMPRESSION_ENABLED           | false                     | Whether events sent to Kafka should be compressed.                                                                         |
 | POLARIS_KAFKA_COMPRESSION_TYPE              | none                      | The compression type used to compress events sent to Kafka.                                                                |
-| POLARIS_PODS_INFORMER_NAMESPACE             | integration               | Namespace used by Polaris to inform pods about changes.                                                                    |
 | POLARIS_APP_NAME                            | horizon-polaris           | Name of the Polaris application.                                                                                           |
 | POLARIS_INFORMER_NAMESPACE                  | integration               | Namespace used by Polaris to inform about changes.                                                                         |

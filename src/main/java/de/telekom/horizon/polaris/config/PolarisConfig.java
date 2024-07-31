@@ -13,11 +13,8 @@ import java.util.List;
 @Configuration
 @Getter
 public class PolarisConfig {
-    @Value("${kubernetes.informer.namespace}")
-    private String environment;
-
-    @Value("${polaris.pod-name}")
-    private String podName;
+    @Value("${polaris.default-environment}")
+    private String defaultEnvironment;
 
     @Value("${polaris.max-timeout}")
     private long maxTimeout;

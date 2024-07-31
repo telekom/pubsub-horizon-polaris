@@ -9,8 +9,6 @@ import brave.Span;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.telekom.eni.pandora.horizon.kafka.event.EventWriter;
-import de.telekom.eni.pandora.horizon.kubernetes.PodResourceListener;
-import de.telekom.eni.pandora.horizon.kubernetes.SubscriptionResourceListener;
 import de.telekom.eni.pandora.horizon.kubernetes.resource.Subscription;
 import de.telekom.eni.pandora.horizon.kubernetes.resource.SubscriptionResource;
 import de.telekom.eni.pandora.horizon.kubernetes.resource.SubscriptionResourceSpec;
@@ -29,17 +27,14 @@ import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
 import de.telekom.eni.pandora.horizon.tracing.HorizonTracer;
 import de.telekom.horizon.polaris.cache.HealthCheckCache;
 import de.telekom.horizon.polaris.cache.PartialSubscriptionCache;
-import de.telekom.horizon.polaris.cache.PolarisPodCache;
 import de.telekom.horizon.polaris.component.CircuitBreakerManager;
 import de.telekom.horizon.polaris.component.HealthCheckRestClient;
 import de.telekom.horizon.polaris.config.PolarisConfig;
-import de.telekom.horizon.polaris.kubernetes.PodResourceEventHandler;
 import de.telekom.horizon.polaris.model.PartialSubscription;
-import de.telekom.horizon.polaris.service.*;
-import io.fabric8.kubernetes.api.model.ContainerStatus;
-import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodStatus;
+import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
+import de.telekom.horizon.polaris.service.SubscriptionRepublishingHolder;
+import de.telekom.horizon.polaris.service.ThreadPoolService;
+import de.telekom.horizon.polaris.service.WorkerService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import lombok.SneakyThrows;
@@ -64,18 +59,12 @@ public class MockGenerator {
     public static KafkaTemplate kafkaTemplate;
     public static PartialSubscriptionCache partialSubscriptionCache;
     public static PolarisConfig polarisConfig;
-    public static PodService podService;
     public static MessageStateMongoRepo messageStateMongoRepo;
     public static HorizonTracer tracer;
     public static ThreadPoolService threadPoolService;
     public static CircuitBreakerCacheService circuitBreakerCache;
     public static HealthCheckCache healthCheckCache;
-    public static PolarisService polarisService;
-    public static SubscriptionResourceListener subscriptionResourceListener;
-    public static PodResourceListener podResourceListener;
-    public static PodResourceEventHandler podResourceEventHandler;
     public static Environment environment;
-    public static PolarisPodCache polarisPodCache;
     public static CircuitBreakerManager circuitBreakerManager;
     public static HealthCheckRestClient healthCheckRestClient;
     public static EventWriter eventWriter;
@@ -83,6 +72,8 @@ public class MockGenerator {
     public static MeterRegistry meterRegistry;
 
     public static SubscriptionRepublishingHolder subscriptionRepublishingHolder;
+
+    public static WorkerService workerService;
 
     @SneakyThrows
     public static ThreadPoolService mockThreadPoolService() {
@@ -95,25 +86,19 @@ public class MockGenerator {
         circuitBreakerCache = mock(CircuitBreakerCacheService.class);
         healthCheckCache = spy(new HealthCheckCache());
         threadPoolService = mock(ThreadPoolService.class);
-        subscriptionResourceListener = mock(SubscriptionResourceListener.class);
-        podResourceListener = mock(PodResourceListener.class);
-        polarisPodCache = spy(new PolarisPodCache());
-        podService = mock(PodService.class);
         environment = mock(Environment.class);
         eventWriter = mock(EventWriter.class);
         meterRegistry = new SimpleMeterRegistry();
         subscriptionRepublishingHolder = new SubscriptionRepublishingHolder();
+        workerService = mock(WorkerService.class);
 
 
         healthCheckRestClient = mock(HealthCheckRestClient.class);
         when(environment.getActiveProfiles()).thenReturn(new String[]{"test"});
 
-        polarisService = spy(new PolarisService(subscriptionResourceListener, podResourceListener, polarisPodCache, partialSubscriptionCache));
-
         when(polarisConfig.getRequestCooldownResetMins()).thenReturn(90);
         when(polarisConfig.getRepublishingBatchSize()).thenReturn(10);
         when(polarisConfig.getPollingBatchSize()).thenReturn(10);
-        when(polarisConfig.getPodName()).thenReturn(POD_NAME);
         when(polarisConfig.getSuccessfulStatusCodes()).thenReturn(Arrays.asList(200, 201, 202, 204));
 
         when(polarisConfig.getRepublishingThreadpoolMaxPoolSize()).thenReturn(1);
@@ -124,16 +109,12 @@ public class MockGenerator {
         when(polarisConfig.getSubscriptionCheckThreadpoolCorePoolSize()).thenReturn(1);
         when(polarisConfig.getSubscriptionCheckThreadpoolQueueCapacity()).thenReturn(100);
 
-        podService = spy(new PodService(polarisPodCache, polarisConfig));
-
         when(threadPoolService.getKafkaTemplate()).thenReturn(kafkaTemplate);
         when(threadPoolService.getPartialSubscriptionCache()).thenReturn(partialSubscriptionCache);
         when(threadPoolService.getHealthCheckCache()).thenReturn(healthCheckCache);
         when(threadPoolService.getPolarisConfig()).thenReturn(polarisConfig);
         when(threadPoolService.getCircuitBreakerCacheService()).thenReturn(circuitBreakerCache);
         when(threadPoolService.getMessageStateMongoRepo()).thenReturn(messageStateMongoRepo);
-        when(threadPoolService.getPodService()).thenReturn(podService);
-//        when(threadPoolService.getPolarisService()).thenReturn(polarisService);
         when(threadPoolService.getRestClient()).thenReturn(healthCheckRestClient);
         when(threadPoolService.getEventWriter()).thenReturn(eventWriter);
 
@@ -145,7 +126,6 @@ public class MockGenerator {
 
 
         circuitBreakerManager = spy(new CircuitBreakerManager(threadPoolService));
-        podResourceEventHandler = spy(new PodResourceEventHandler(polarisPodCache, circuitBreakerManager));
 
         when(tracer.startScopedSpan(any())).thenReturn( mock(ScopedSpan.class));
         when(tracer.startSpanFromKafkaHeaders(anyString(), any())).thenReturn(mock(Span.class));
@@ -153,34 +133,9 @@ public class MockGenerator {
 
         when(kafkaTemplate.send((ProducerRecord) any())).thenReturn(mock(CompletableFuture.class));
 
-        threadPoolService = spy(new ThreadPoolService(circuitBreakerCache, healthCheckCache, partialSubscriptionCache, kafkaTemplate, polarisConfig, podService, healthCheckRestClient, tracer, messageStateMongoRepo, eventWriter, meterRegistry, subscriptionRepublishingHolder));
+        threadPoolService = spy(new ThreadPoolService(circuitBreakerCache, healthCheckCache, partialSubscriptionCache, kafkaTemplate, polarisConfig, healthCheckRestClient, tracer, messageStateMongoRepo, eventWriter, meterRegistry, subscriptionRepublishingHolder, workerService));
 
         return threadPoolService;
-    }
-
-    public static List<Pod> createFakePods(int count) {
-        List<Pod> fakePods = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            String randomName = String.format("horizon-polaris-next-%s", RandomStringUtils.random(7, true, false));
-            fakePods.add(createFakePod(randomName));
-        }
-        return fakePods;
-    }
-
-    public static Pod createFakePod(String name) {
-        ObjectMeta objectMeta = new ObjectMeta();
-        objectMeta.setName(name);
-
-        PodStatus podStatus = new PodStatus();
-        podStatus.setPhase("Running");
-
-        ContainerStatus containerStatus = new ContainerStatus();
-        containerStatus.setReady(true);
-        containerStatus.setStarted(true);
-
-        podStatus.setContainerStatuses(List.of(containerStatus));
-
-        return new Pod("v1", "kind", objectMeta, null, podStatus);
     }
 
     public static List<CircuitBreakerMessage> createFakeCircuitBreakerMessages(int count) {

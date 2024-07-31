@@ -73,6 +73,7 @@ public class HealthCheckCache {
         var newHealthCheckData = getCache().compute(key, (callbackKey, oldHealthCheckDataOrNull) -> {
             log.debug("Computing add for callbackUrl {} and httpMethod: {}. oldHealthCheckDataOrNull: {}", callbackUrl, httpMethod, oldHealthCheckDataOrNull);
             HealthCheckData healthCheckData = new HealthCheckData();
+            healthCheckData.setKey(key.toString());
             if(oldHealthCheckDataOrNull != null) {
                 healthCheckData = oldHealthCheckDataOrNull;
             }

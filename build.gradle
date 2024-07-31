@@ -46,10 +46,6 @@ repositories {
     mavenCentral()
 }
 
-def httpClientVersion = '4.5.13'
-// ENI
-def horizonParentVersion='4.0.5'
-
 dependencies {
     // Spring
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'

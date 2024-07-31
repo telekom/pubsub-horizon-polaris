@@ -5,23 +5,19 @@
 package de.telekom.horizon.polaris.config;
 
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
-import de.telekom.eni.pandora.horizon.kubernetes.InformerStoreInitHandler;
-import de.telekom.eni.pandora.horizon.kubernetes.PodResourceListener;
-import de.telekom.eni.pandora.horizon.kubernetes.SubscriptionResourceListener;
 import de.telekom.horizon.polaris.util.EmbeddedKafkaHolder;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static de.telekom.horizon.polaris.util.WiremockStubs.stubOidc;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @SpringBootTest
 class PolarisConfigTest {
@@ -32,13 +28,6 @@ class PolarisConfigTest {
     public static WireMockExtension wireMockServer = WireMockExtension.newInstance()
             .options(wireMockConfig().dynamicPort())
             .build();
-
-    @MockBean
-    private SubscriptionResourceListener subscriptionResourceListener;
-    @MockBean
-    protected PodResourceListener podResourceListener;
-    @MockBean
-    private InformerStoreInitHandler informerStoreInitHandler;
 
     @Autowired
     PolarisConfig polarisConfig;

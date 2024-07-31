@@ -4,7 +4,6 @@
 
 package de.telekom.horizon.polaris.task;
 
-import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import de.telekom.eni.pandora.horizon.model.event.DeliveryType;
 import de.telekom.eni.pandora.horizon.model.event.Status;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerHealthCheck;
@@ -12,12 +11,11 @@ import de.telekom.eni.pandora.horizon.mongo.model.MessageStateMongoDocument;
 import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
 import de.telekom.horizon.polaris.cache.HealthCheckCache;
 import de.telekom.horizon.polaris.config.PolarisConfig;
-import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException;
 import de.telekom.horizon.polaris.model.HealthCheckData;
 import de.telekom.horizon.polaris.model.PartialSubscription;
 import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
-import de.telekom.horizon.polaris.service.PodService;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
+import de.telekom.horizon.polaris.service.WorkerService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -29,7 +27,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * <p>Compares current (new) subscription with old subscription.</p>
@@ -51,8 +48,9 @@ public class SubscriptionComparisonTask implements Runnable {
     private final CircuitBreakerCacheService circuitBreakerCache;
     private final PolarisConfig polarisConfig;
     private final ThreadPoolService threadPoolService;
-    private final PodService podService;
     private final MessageStateMongoRepo messageStateMongoRepo;
+
+    private final WorkerService workerService;
 
     public SubscriptionComparisonTask(PartialSubscription oldPartialSubscription, PartialSubscription currPartialSubscriptionOrNull, ThreadPoolService threadPoolService) {
         this.threadPoolService = threadPoolService;
@@ -61,8 +59,8 @@ public class SubscriptionComparisonTask implements Runnable {
         this.healthCheckCache = threadPoolService.getHealthCheckCache();
         this.circuitBreakerCache = threadPoolService.getCircuitBreakerCacheService();
         this.polarisConfig = threadPoolService.getPolarisConfig();
-        this.podService = threadPoolService.getPodService();
         this.messageStateMongoRepo = threadPoolService.getMessageStateMongoRepo();
+        this.workerService = threadPoolService.getWorkerService();
     }
 
     /**
@@ -89,87 +87,84 @@ public class SubscriptionComparisonTask implements Runnable {
 
         String currCallbackUrlOrNull = currPartialSubscriptionOrNull.callbackUrl(); // can be null of new subscription is SSE
 
-        // Check if other pod is working on callbackUrl
-        String oldCallbackUrlOrNewOrNull = Objects.requireNonNullElse(oldCallbackUrlOrNull, currCallbackUrlOrNull);
-        try {
-            if (!podService.shouldCallbackUrlBeHandledByThisPod(oldCallbackUrlOrNewOrNull)) {
-                log.info("Another polaris pod instance will handle the callbackUrl {}", oldCallbackUrlOrNewOrNull);
-                return;
-            }
-        } catch (CouldNotDetermineWorkingSetException e) {
-            throw new RuntimeException(e);
-        }
+        if (workerService.tryGlobalLock()) {
+            try {
+                if (workerService.tryClaim(subscriptionId)) {
+                    if (hasDeliveryTypeChanged(DeliveryType.CALLBACK, DeliveryType.SERVER_SENT_EVENT)) {
+                        cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
+                        threadPoolService.startHandleDeliveryTypeChangeTask(currPartialSubscriptionOrNull);
+                    } else if (hasDeliveryTypeChanged(DeliveryType.SERVER_SENT_EVENT, DeliveryType.CALLBACK)) {
+                        // SSE -> Callback does not need to be handled extra, logic is same as for callback -> callback
+                        // If polaris dies WHILE reproducing SSE -> Callback, those messages gets LOST, bc the information is nowhere persistent
+                        threadPoolService.startHandleDeliveryTypeChangeTask(currPartialSubscriptionOrNull);
 
-        if (hasDeliveryTypeChanged(DeliveryType.CALLBACK, DeliveryType.SERVER_SENT_EVENT)) {
-            cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
-            threadPoolService.startHandleDeliveryTypeChangeTask(currPartialSubscriptionOrNull);
+                    } else { // no delivery type change (callback -> callback)
+                        if(currPartialSubscriptionOrNull.isCircuitBreakerOptOut()) {
+                            String newCallbackUrlOrOldOrNull = Objects.requireNonNullElse(oldCallbackUrlOrNull, currCallbackUrlOrNull);
+                            var currHttpMethod = currPartialSubscriptionOrNull.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
 
-        } else if (hasDeliveryTypeChanged(DeliveryType.SERVER_SENT_EVENT, DeliveryType.CALLBACK)) {
-            // SSE -> Callback does not need to be handled extra, logic is same as for callback -> callback
-            // If polaris dies WHILE reproducing SSE -> Callback, those messages gets LOST, bc the information is nowhere persistent
-            threadPoolService.startHandleDeliveryTypeChangeTask(currPartialSubscriptionOrNull);
+                            // Workaround to fix bug where WAITING events can't be republished for opt-out subscriptions:
+                            healthCheckCache.add(newCallbackUrlOrOldOrNull, currHttpMethod, currPartialSubscriptionOrNull.subscriptionId());
 
-        } else { // no delivery type change (callback -> callback)
-            if(currPartialSubscriptionOrNull.isCircuitBreakerOptOut()) {
+                            // Check here if there are some events on status WAITING
+                            int batchSize = polarisConfig.getPollingBatchSize();
+                            Pageable pageable = PageRequest.of(0, batchSize, Sort.by(Sort.Direction.ASC, "timestamp"));
 
-                String newCallbackUrlOrOldOrNull = Objects.requireNonNullElse(oldCallbackUrlOrNull, currCallbackUrlOrNull);
-                var currHttpMethod = currPartialSubscriptionOrNull.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
+                            Slice<MessageStateMongoDocument> waitingEvents;
+                            var foundWaitingEvents = false;
 
-                // Check here if there are some events on status WAITING
-                int batchSize = polarisConfig.getPollingBatchSize();
-                Pageable pageable = PageRequest.of(0, batchSize, Sort.by(Sort.Direction.ASC, "timestamp"));
+                            do {
+                                waitingEvents = messageStateMongoRepo.findByStatusInAndDeliveryTypeAndSubscriptionIdAsc(List.of(Status.WAITING), DeliveryType.CALLBACK, subscriptionId, pageable);
 
-                Slice<MessageStateMongoDocument> waitingEvents;
-                var foundWaitingEvents = false;
+                                if (!waitingEvents.isEmpty()) {
+                                    foundWaitingEvents = true;
 
-                do {
-                    waitingEvents = messageStateMongoRepo.findByStatusInAndDeliveryTypeAndSubscriptionIdAsc(List.of(Status.WAITING), DeliveryType.CALLBACK, subscriptionId, pageable);
+                                    log.warn("Waiting events: {}", waitingEvents.getNumberOfElements());
+                                    log.warn("Found waiting events for subscription {} and start to handleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
 
-                    if (!waitingEvents.isEmpty()) {
-                        foundWaitingEvents = true;
+                                    threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+                                } else {
+                                    log.warn("No waiting events found for subscription {}", currPartialSubscriptionOrNull);
+                                }
 
-                        log.warn("Waiting events: {}", waitingEvents.getNumberOfElements());
-                        log.warn("Found waiting events for subscription {} and start to handleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
-                        threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
-                    } else {
-                        log.warn("No waiting events found for subscription {}", currPartialSubscriptionOrNull);
+                                pageable = pageable.next();
+                            } while (waitingEvents.hasNext());
+
+                            if (!foundWaitingEvents) {
+                                log.warn("No waiting events found for subscription {} and start HandleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
+                                threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
+                            }
+
+                            return;
+                        }
+
+                        boolean isCallbackUrlSame = Objects.equals(oldCallbackUrlOrNull, currCallbackUrlOrNull);
+                        if(isCallbackUrlSame) { // callbackUrl did not change -> start healthRequestTask
+                            boolean didHttpMethodChange = !Objects.equals(oldPartialSubscription.isGetMethodInsteadOfHead(), currPartialSubscriptionOrNull.isGetMethodInsteadOfHead());
+                            if (didHttpMethodChange) {
+                                cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
+                            }
+                            startNewHealthRequestTask(currPartialSubscriptionOrNull);
+                            return;
+                        }
+
+                        var oCBMessage = circuitBreakerCache.getCircuitBreakerMessage(subscriptionId);
+                        if(oCBMessage.isEmpty()) { // no openCircuitBreakers for new callbackUrl -> no need to do something
+                            log.info("No circuit breaker messages found for subscription {}", currPartialSubscriptionOrNull);
+                        } else { // new callbackUrl with openCircuitBreaker
+                            cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
+                            var cbMessage = oCBMessage.get();
+                            cbMessage.setCallbackUrl(currCallbackUrlOrNull);
+                            circuitBreakerCache.updateCircuitBreakerMessage(cbMessage);
+                            startNewHealthRequestTask(currPartialSubscriptionOrNull);
+                        }
                     }
-
-                    pageable = pageable.next();
-                } while (waitingEvents.hasNext());
-
-                if (!foundWaitingEvents) {
-                    log.warn("No waiting events found for subscription {} and start HandleSuccessfulHealthRequestTask", currPartialSubscriptionOrNull);
-                    threadPoolService.startHandleSuccessfulHealthRequestTask(newCallbackUrlOrOldOrNull, currHttpMethod);
-                    //cleanHealthCheckCacheFromSubscriptionId(currPartialSubscriptionOrNull);
                 }
-
-                return;
-            }
-
-            boolean isCallbackUrlSame = Objects.equals(oldCallbackUrlOrNull, currCallbackUrlOrNull);
-            if(isCallbackUrlSame) { // callbackUrl did not change -> start healthRequestTask
-                boolean didHttpMethodChange = !Objects.equals(oldPartialSubscription.isGetMethodInsteadOfHead(), currPartialSubscriptionOrNull.isGetMethodInsteadOfHead());
-                if (didHttpMethodChange) {
-                    cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
-                }
-                startNewHeathRequestTask(currPartialSubscriptionOrNull);
-                return;
-            }
-
-            var oCBMessage = circuitBreakerCache.getCircuitBreakerMessage(subscriptionId);
-            if(oCBMessage.isEmpty()) { // no openCircuitBreakers for new callbackUrl -> no need to do something
-                log.info("No circuit breaker messages found for subscription {}", currPartialSubscriptionOrNull);
-            } else { // new callbackUrl with openCircuitBreaker
-                cleanHealthCheckCacheFromSubscriptionId(oldPartialSubscription);
-                var cbMessage = oCBMessage.get();
-                cbMessage.setCallbackUrl(currCallbackUrlOrNull);
-                circuitBreakerCache.updateCircuitBreakerMessage(cbMessage);
-                startNewHeathRequestTask(currPartialSubscriptionOrNull);
+            } finally {
+                workerService.globalUnlock();
             }
         }
     }
-
 
     /**
      * Checks if the delivery type has changed.
@@ -217,13 +212,14 @@ public class SubscriptionComparisonTask implements Runnable {
      *
      * @param partialSubscription The current partial subscription.
      */
-    private void startNewHeathRequestTask(PartialSubscription partialSubscription) {
+    private void startNewHealthRequestTask(PartialSubscription partialSubscription) {
         var currHttpMethod = partialSubscription.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
-        var oHealthCheck = healthCheckCache.get(partialSubscription.callbackUrl(), currHttpMethod);
         // true, if health request exists and no thread is open.
         // health request data needs to exist, else no subscription id for callback url was added, which means that no head request needs to be done
         boolean shouldStartHealthRequest = healthCheckCache.add(partialSubscription.callbackUrl(), currHttpMethod, partialSubscription.subscriptionId());
         if (shouldStartHealthRequest) {
+            var oHealthCheck = healthCheckCache.get(partialSubscription.callbackUrl(), currHttpMethod);
+
             var republishCount = oHealthCheck.map(HealthCheckData::getRepublishCount).orElse(0);
             var oLastCheckDate = oHealthCheck.map(HealthCheckData::getLastHealthCheckOrNull).map(CircuitBreakerHealthCheck::getLastCheckedDate);
 

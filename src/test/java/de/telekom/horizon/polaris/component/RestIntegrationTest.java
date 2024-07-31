@@ -7,11 +7,11 @@ package de.telekom.horizon.polaris.component;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.matching.UrlPattern;
+import de.telekom.eni.pandora.horizon.exception.JsonCacheException;
 import de.telekom.eni.pandora.horizon.kubernetes.resource.SubscriptionResource;
 import de.telekom.eni.pandora.horizon.model.event.Status;
 import de.telekom.eni.pandora.horizon.model.event.SubscriptionEventMessage;
 import de.telekom.eni.pandora.horizon.model.meta.CircuitBreakerStatus;
-import de.telekom.horizon.polaris.component.rest.HealthCheckController;
 import de.telekom.horizon.polaris.model.CloseCircuitBreakersRequest;
 import de.telekom.horizon.polaris.model.PartialSubscription;
 import de.telekom.horizon.polaris.service.CircuitBreakerCacheService;
@@ -20,14 +20,15 @@ import de.telekom.horizon.polaris.util.AbstractIntegrationTest;
 import de.telekom.horizon.polaris.util.MockGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.hamcrest.Matchers;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.SpyBean;
-import org.springframework.http.*;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
@@ -35,17 +36,17 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
 import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static de.telekom.horizon.polaris.TestConstants.CALLBACK_URL;
 import static de.telekom.horizon.polaris.TestConstants.SUBSCRIPTION_ID;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -54,9 +55,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Slf4j
 @AutoConfigureMockMvc(addFilters = false)
 public class RestIntegrationTest extends AbstractIntegrationTest {
-
-    @SpyBean
-    private HealthCheckController healthCheckController;
 
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     @Autowired
@@ -68,15 +66,13 @@ public class RestIntegrationTest extends AbstractIntegrationTest {
     private ThreadPoolService threadPoolService;
 
     private SubscriptionEventMessage subscriptionMessage_WAITING;
-    private SubscriptionEventMessage subscriptionMessage_WAITING2;
     private PartialSubscription partialSubscription_HEAD;
 
     @SpyBean
     private CircuitBreakerCacheService circuitBreakerCacheService;
 
-
     @BeforeEach
-    void beforeEach() throws ExecutionException, JsonProcessingException, InterruptedException {
+    void beforeEach() throws JsonCacheException {
         wireMockServer.stubFor(
                 head(new UrlPattern(equalTo(CALLBACK_URL), false))
                         .willReturn(aResponse().withStatus(HttpStatus.SERVICE_UNAVAILABLE.value()))
@@ -142,7 +138,6 @@ public class RestIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void testGetForCallbackUrlAndHttpMethodAfterSuccessfulRedelivery() throws Exception {
-        wireMockServer.resetAll();
         wireMockServer.stubFor(
                 head(new UrlPattern(equalTo(CALLBACK_URL), false))
                         .willReturn(aResponse().withStatus(HttpStatus.OK.value()))
@@ -225,13 +220,10 @@ public class RestIntegrationTest extends AbstractIntegrationTest {
                 .andReturn();
     }
 
-
     @Test
     void testClosingOpenCircuitBreaker() throws Exception {
         var sendResult = simulateNewPublishedEvent(subscriptionMessage_WAITING);
         simulateOpenCircuitBreaker(partialSubscription_HEAD, subscriptionMessage_WAITING.getUuid(), sendResult.getRecordMetadata().partition(), sendResult.getRecordMetadata().offset());;
-
-        HttpMethod httpMethod = partialSubscription_HEAD.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
 
         var closeCircuitBreakersRequest = new CloseCircuitBreakersRequest(List.of(partialSubscription_HEAD.subscriptionId()));
         ObjectMapper objectMapper = new ObjectMapper();
@@ -312,7 +304,6 @@ public class RestIntegrationTest extends AbstractIntegrationTest {
         assertEquals(0, cbs.size());
     }
 
-
     @Test
     void testClosingCircuitBreakerWithoutSubscription() throws Exception {
         var sendResult = simulateNewPublishedEvent(subscriptionMessage_WAITING);
@@ -327,8 +318,8 @@ public class RestIntegrationTest extends AbstractIntegrationTest {
                         argThat(am -> am.getSubscriptionId().equals(SUBSCRIPTION_ID) && am.getLastHealthCheck() != null));
 
 
-        // Remove subscription from cache
-        partialSubscriptionCache.remove(partialSubscription_HEAD);
+        // Mock removal of subscription from cache
+        when(jsonCacheService.getByKey(eq(SUBSCRIPTION_ID))).thenReturn(Optional.empty());
 
         var closeCircuitBreakersRequest = new CloseCircuitBreakersRequest(List.of(partialSubscription_HEAD.subscriptionId()));
         ObjectMapper objectMapper = new ObjectMapper();
@@ -391,12 +382,15 @@ public class RestIntegrationTest extends AbstractIntegrationTest {
     }
 
 
-    private PartialSubscription addFakePartialSubscription(String subscriptionId, String callbackUrl, boolean isGetInsteadOfHead) {
+    private PartialSubscription addFakePartialSubscription(String subscriptionId, String callbackUrl, boolean isGetInsteadOfHead) throws JsonCacheException {
         SubscriptionResource subscriptionResource = MockGenerator.createFakeSubscriptionResource("playground", getEventType());
         subscriptionResource.getSpec().getSubscription().setSubscriptionId(subscriptionId);
         subscriptionResource.getSpec().getSubscription().setEnforceGetHttpRequestMethodForHealthCheck(isGetInsteadOfHead);
         subscriptionResource.getSpec().getSubscription().setCallback(wireMockServer.baseUrl() + callbackUrl);
-        return addTestSubscription(subscriptionResource);
+
+        when(jsonCacheService.getByKey(eq(subscriptionId))).thenReturn(Optional.of(subscriptionResource));
+
+        return PartialSubscription.fromSubscriptionResource(subscriptionResource);
     }
 
     private SubscriptionEventMessage generateFakeSubscriptionEventMessage(String subscriptionId, String callbackUrl) {

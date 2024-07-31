@@ -58,6 +58,8 @@ class HealthRequestTaskTest {
 
     @BeforeEach
     void prepare() throws CallbackException {
+        MockGenerator.mockThreadPoolService();
+
         when(fakeStatusLine.getStatusCode()).thenReturn(200);
         when(fakeStatusLine.getReasonPhrase()).thenReturn("Ok");
 

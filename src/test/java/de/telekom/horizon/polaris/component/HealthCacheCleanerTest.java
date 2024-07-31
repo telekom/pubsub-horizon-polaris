@@ -16,7 +16,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.mockito.Mock;
 import org.springframework.http.HttpMethod;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
@@ -31,7 +30,6 @@ import static org.mockito.Mockito.*;
 @Slf4j
 class HealthCacheCleanerTest {
 
-    @Mock
     ThreadPoolService threadPoolService;
     HealthCacheCleaner healthCacheCleaner;
 

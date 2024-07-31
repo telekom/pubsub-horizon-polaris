@@ -10,7 +10,6 @@ import de.telekom.eni.pandora.horizon.model.event.Status;
 import de.telekom.eni.pandora.horizon.mongo.model.MessageStateMongoDocument;
 import de.telekom.horizon.polaris.exception.CallbackException;
 import de.telekom.horizon.polaris.exception.CouldNotDetermineWorkingSetException;
-import de.telekom.horizon.polaris.kubernetes.PodResourceEventHandler;
 import de.telekom.horizon.polaris.model.PartialSubscription;
 import de.telekom.horizon.polaris.service.ThreadPoolService;
 import de.telekom.horizon.polaris.util.MockGenerator;
@@ -37,8 +36,6 @@ class ScheduledEventFailedHandlerTest {
 
     private ThreadPoolService threadPoolService;
 
-    PodResourceEventHandler podResourceEventHandler;
-
     public ScheduledEventFailedHandler scheduledEventFailedHandler;
 
 
@@ -47,14 +44,10 @@ class ScheduledEventFailedHandlerTest {
 
         threadPoolService = MockGenerator.mockThreadPoolService();
 
-        doReturn(true).when(MockGenerator.polarisService).areResourcesFullySynced();
-//        when(MockGenerator.podService.getAllPods()).thenReturn(List.of(POD_NAME));
-
         var fakePartialSubscription = new PartialSubscription(ENV, SUBSCRIPTION_ID, PUBLISHER_ID, SUBSCRIBER_ID, CALLBACK_URL, DeliveryType.CALLBACK, false, false);
 
         when(MockGenerator.partialSubscriptionCache.get(anyString())).thenReturn(Optional.ofNullable(fakePartialSubscription));
 
-        when(MockGenerator.polarisConfig.getPodName()).thenReturn(POD_NAME);
         when(MockGenerator.polarisConfig.getPollingBatchSize()).thenReturn(10);
         when(threadPoolService.getPolarisConfig()).thenReturn(MockGenerator.polarisConfig);
 
@@ -65,42 +58,20 @@ class ScheduledEventFailedHandlerTest {
 
         when(threadPoolService.getMessageStateMongoRepo()).thenReturn(MockGenerator.messageStateMongoRepo);
 
+        scheduledEventFailedHandler =  spy(new ScheduledEventFailedHandler(threadPoolService));
 
-        var fakePod = MockGenerator.createFakePod(POD_NAME);
-        MockGenerator.podResourceEventHandler.onAdd(fakePod);
-
-        scheduledEventFailedHandler =  spy(new ScheduledEventFailedHandler(threadPoolService, MockGenerator.polarisService));
-    }
-
-    @Test
-    @DisplayName("should do nothing if resources are not fully synced")
-    void shouldDoNothingIfResourcesAreNotFullySynced() throws CouldNotDetermineWorkingSetException {
-        doReturn(false).when(MockGenerator.polarisService).areResourcesFullySynced();
-
-        scheduledEventFailedHandler.run();
-
-        verify(MockGenerator.polarisConfig, never()).getPollingBatchSize();
-        verify(MockGenerator.messageStateMongoRepo, never()).findStatusFailedWithCallbackExceptionAsc(isA(Pageable.class));
-        verify(MockGenerator.threadPoolService, never()).startRepublishTask(any());
+        when(MockGenerator.workerService.tryGlobalLock()).thenReturn(true);
     }
 
     @Test
     @DisplayName("should call processMessagesStates if resources are fully synced")
-    void shouldWorkIfResourcesAreFullySynced() throws CouldNotDetermineWorkingSetException {
+    void shouldWorkIfResourcesAreFullySynced() {
 
         scheduledEventFailedHandler.run();
 
         verify(MockGenerator.polarisConfig, times(1)).getPollingBatchSize();
         verify(MockGenerator.messageStateMongoRepo, atLeastOnce()).findStatusFailedWithCallbackExceptionAsc(isA(Pageable.class));
-        verify(MockGenerator.threadPoolService, atLeastOnce()).startRepublishTask(any());
-    }
-
-    @Test
-    @DisplayName("should start RepublishTask")
-    void shouldStartSubscriptionComparisonTask() throws CouldNotDetermineWorkingSetException {
-        scheduledEventFailedHandler.run();
-
-        verify(threadPoolService, times(1)).startRepublishTask(notNull());
+        verify(MockGenerator.threadPoolService, atLeastOnce()).startRepublishTask(notNull());
     }
 
     @Test

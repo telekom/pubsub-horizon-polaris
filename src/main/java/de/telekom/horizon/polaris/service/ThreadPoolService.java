@@ -5,6 +5,7 @@
 package de.telekom.horizon.polaris.service;
 
 import com.google.common.util.concurrent.*;
+import de.telekom.eni.pandora.horizon.cache.listener.SubscriptionResourceEvent;
 import de.telekom.eni.pandora.horizon.kafka.event.EventWriter;
 import de.telekom.eni.pandora.horizon.mongo.model.MessageStateMongoDocument;
 import de.telekom.eni.pandora.horizon.mongo.repository.MessageStateMongoRepo;
@@ -21,6 +22,7 @@ import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Slice;
 import org.springframework.http.HttpMethod;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -31,6 +33,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,7 +67,6 @@ public class ThreadPoolService {
     private final PartialSubscriptionCache partialSubscriptionCache;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final PolarisConfig polarisConfig;
-    private final PodService podService;
     private final HealthCheckRestClient restClient;
     private final HorizonTracer tracer;
     private final MessageStateMongoRepo messageStateMongoRepo;
@@ -72,31 +74,31 @@ public class ThreadPoolService {
     private final EventWriter eventWriter;
     private final MeterRegistry meterRegistry;
     private final SubscriptionRepublishingHolder subscriptionRepublishingHolder;
+    private final WorkerService workerService;
 
     public ThreadPoolService(CircuitBreakerCacheService circuitBreakerCacheService,
                              HealthCheckCache healthCheckCache,
                              PartialSubscriptionCache partialSubscriptionCache,
                              KafkaTemplate<String, String> kafkaTemplate,
                              PolarisConfig polarisConfig,
-                             PodService podService,
                              HealthCheckRestClient restClient,
                              HorizonTracer tracer,
                              MessageStateMongoRepo messageStateMongoRepo,
                              EventWriter eventWriter,
                              MeterRegistry meterRegistry,
-                             SubscriptionRepublishingHolder subscriptionRepublishingHolder) {
+                             SubscriptionRepublishingHolder subscriptionRepublishingHolder, WorkerService workerService) {
         this.circuitBreakerCacheService = circuitBreakerCacheService;
         this.restClient = restClient;
         this.healthCheckCache = healthCheckCache;
         this.partialSubscriptionCache = partialSubscriptionCache;
         this.kafkaTemplate = kafkaTemplate;
         this.polarisConfig = polarisConfig;
-        this.podService = podService;
         this.tracer = tracer;
         this.messageStateMongoRepo = messageStateMongoRepo;
         this.eventWriter = eventWriter;
         this.meterRegistry = meterRegistry;
         this.subscriptionRepublishingHolder = subscriptionRepublishingHolder;
+        this.workerService = workerService;
 
         this.republishingTaskExecutor = new ThreadPoolTaskExecutor();
         this.subscriptionCheckTaskExecutor = new ThreadPoolTaskExecutor();
@@ -240,8 +242,8 @@ public class ThreadPoolService {
             stopHealthRequestTask(callbackUrl, httpMethod);
         }
 
-        var republishingTask = new HealthRequestTask(callbackUrl, publisherId, subscriberId, environment, httpMethod, this);
-        var future = requestTaskScheduler.schedule(republishingTask, initialDelay);
+        var healthRequestTask = new HealthRequestTask(callbackUrl, publisherId, subscriberId, environment, httpMethod, this);
+        var future = requestTaskScheduler.schedule(healthRequestTask, initialDelay);
 
         requestingTasks.put(key, future);
 
@@ -280,5 +282,68 @@ public class ThreadPoolService {
     public Optional<ListenableScheduledFuture<?>> getHealthRequestTask(String callbackUrl, HttpMethod httpMethod) {
         var key = new CallbackKey(callbackUrl, httpMethod);
         return Optional.ofNullable(requestingTasks.get(key));
+    }
+
+    @EventListener
+    public void handleSubscriptionResourceEvent(SubscriptionResourceEvent event) {
+        var eventType = event.getEntryEvent().getEventType();
+
+        log.debug("Received {} event for subscription with ID {}", eventType, event.getEntryEvent().getKey());
+
+        switch (event.getEntryEvent().getEventType()) {
+            case UPDATED:
+                var newResource = event.getValue();
+                var oldResource = event.getOldValue();
+
+                if (newResource != null && oldResource != null) {
+                    log.debug("Update SubscriptionResource: {}", newResource);
+
+                    var newPartialSubscription = PartialSubscription.fromSubscriptionResource(newResource);
+                    var oldPartialSubscription = PartialSubscription.fromSubscriptionResource(oldResource);
+
+                    log.debug("oldPartialSubscription: {} -> newPartialSubscription: {}", oldPartialSubscription, newPartialSubscription);
+                    if(checkIfCallbackUrlOrHttpMethodChanged(oldPartialSubscription, newPartialSubscription)
+                            || newPartialSubscription.isCircuitBreakerOptOut()) {
+
+                        var oldHttpMethod = oldPartialSubscription.isGetMethodInsteadOfHead() ? HttpMethod.GET : HttpMethod.HEAD;
+                        stopHealthRequestTask(oldPartialSubscription.callbackUrl(), oldHttpMethod);
+                        startSubscriptionComparisonTask(oldPartialSubscription, newPartialSubscription);
+                    }
+                }
+                break;
+            case REMOVED:
+            case EVICTED:
+                var resource = event.getValue();
+                if (resource != null) {
+                    var partialSubscription = PartialSubscription.fromSubscriptionResource(resource);
+                    startSubscriptionComparisonTask(partialSubscription, null);
+                }
+
+                break;
+        }
+
+
+
+    }
+
+    /**
+     * Checks if the callback URL or HTTP method has changed between old and new {@link PartialSubscription}.
+     *
+     * @param oldPartialSubscription The old state of the {@link PartialSubscription}.
+     * @param newPartialSubscription The new state of the {@link PartialSubscription}.
+     * @return {@code true} if either the callback URL or HTTP method has changed, otherwise {@code false}.
+     */
+    private boolean checkIfCallbackUrlOrHttpMethodChanged(PartialSubscription oldPartialSubscription, PartialSubscription newPartialSubscription) {
+        // can be null if subscription was/is SSE
+        String oldCallbackUrlOrNull = oldPartialSubscription.callbackUrl();
+        String newCallbackUrlOrNull = newPartialSubscription.callbackUrl();
+
+        boolean callbackUrlChanged = !Objects.equals(oldCallbackUrlOrNull, newCallbackUrlOrNull);
+        boolean httpMethodChanged =  !Objects.equals(oldPartialSubscription.isGetMethodInsteadOfHead(), newPartialSubscription.isGetMethodInsteadOfHead());
+
+        log.debug("callbackUrlChanged: {}", callbackUrlChanged);
+        log.debug("httpMethodChanged: {}", httpMethodChanged);
+
+        return callbackUrlChanged || httpMethodChanged;
     }
 }

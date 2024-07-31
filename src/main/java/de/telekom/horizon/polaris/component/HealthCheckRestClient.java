@@ -34,7 +34,6 @@ import java.io.IOException;
 @Component
 @Slf4j
 public class HealthCheckRestClient {
-    public static final String DEFAULT_REALM = "default";
     private final OAuth2TokenCache oAuth2TokenCache;
     private final CloseableHttpClient httpClient;
     private final PolarisConfig polarisConfig;
@@ -77,8 +76,8 @@ public class HealthCheckRestClient {
     }
 
     private StatusLine doRequest(HttpRequestBase request, String publisherId, String subscriberId, String environment) throws CallbackException {
-        if (environment == null || environment.isEmpty() || environment.equals(polarisConfig.getEnvironment())){
-            environment = DEFAULT_REALM;
+        if (environment == null || environment.isEmpty() || environment.equals(polarisConfig.getDefaultEnvironment())){
+            environment = "default";
         }
 
         request.setHeader(HttpHeaders.AUTHORIZATION, "Bearer " + oAuth2TokenCache.getToken(environment));
