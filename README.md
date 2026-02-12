@@ -20,6 +20,9 @@ SPDX-License-Identifier: Apache-2.0
   <a href="#running-polaris">Running Polaris</a>
 </p>
 
+> [!IMPORTANT]  
+> This component has been superseeded by [Golaris](https://github.com/telekom/pubsub-horizon-golaris)
+
 <!--
 [![REUSE status](https://api.reuse.software/badge/github.com/telekom/pubsub-horizon-polaris)](https://api.reuse.software/info/github.com/telekom/pubsub-horizon-polaris)
 -->
